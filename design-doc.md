@@ -15,8 +15,8 @@ graphite is not a generic “chat with your notes” application. It is a local-
 
 1. accepts course material as PDF, DOCX, TXT, or Markdown;
 2. parses and stores the material locally;
-3. generates embeddings and extracts canonical concepts, typed relationships, and source evidence;
-4. persists both vector-search data and graph-shaped relational data in PostgreSQL with pgvector;
+3. generates embeddings and extracts canonical concepts, procedures, ordered procedure steps, typed relationships, and source evidence;
+4. persists searchable metadata and evidence in relational PostgreSQL tables, vectors through pgvector, and canonical graph topology through Apache AGE in the same PostgreSQL instance;
 5. accepts a concrete learning objective such as “I have two hours to study Units 1–3 and I struggle with recursion”;
 6. retrieves a goal-relevant subgraph;
 7. uses deterministic graph logic to order prerequisites and allocate time;
@@ -37,9 +37,9 @@ That moment directly answers the track's productivity requirement: graphite redu
 | Primary job | Convert messy course material into a timed learning path | More differentiated than note chat |
 | Frontend | React + TypeScript, preferably Vite | Fast local development and strong graph-library support |
 | Backend | FastAPI + Python | Strong PDF/ML tooling and fast typed API construction |
-| Database | Local PostgreSQL + pgvector | One durable system for application, vector, and graph-shaped data |
+| Database | Local PostgreSQL + pgvector + Apache AGE | One durable multi-model system for relational, vector, and graph data |
 | Runtime | Docker Compose for PostgreSQL; frontend/backend run locally | Low setup friction and no cloud deployment dependency |
-| Graph storage | Relational `concepts` and `concept_edges` tables | Avoids introducing Neo4j for a hackathon-sized graph |
+| Graph storage | AGE property graph plus relational entity/relationship registries | Cypher matches the product's graph mental model while stable UUID registries preserve evidence and application integrity |
 | Graph rendering | React Flow | Interactive nodes, edges, layout, and click behavior |
 | Model access | One external model provider for embeddings and LLM inference | Centralizes API configuration and cost controls |
 | Voice | ElevenLabs through the backend only | Keeps the API key out of the browser |
@@ -51,13 +51,14 @@ That moment directly answers the track's productivity requirement: graphite redu
 
 ### 0.2 Non-negotiable product principles
 
-1. **Evidence before confidence.** Every concept and meaningful edge must link to one or more source chunks.
+1. **Evidence before confidence.** Every displayed knowledge entity and meaningful relationship must link to one or more source chunks.
 2. **Graph before generation.** Learning order must use graph structure; it cannot be a single unconstrained model response.
-3. **Goal-specific output.** The full graph is persistent, but every study path is a scoped subgraph created for a specific objective.
-4. **Local by default.** Files, extracted text, embeddings, graph entities, plans, and progress stay in local PostgreSQL. Only required prompt payloads leave the machine.
-5. **Visible uncertainty.** Low-confidence or weakly supported edges are visually distinguishable and never silently treated as fact.
-6. **Progressive value.** A partial ingestion should still produce something inspectable. Voice and polished artifacts must not block the graph and path.
-7. **No dead-end screens.** Every application state must tell the user what happened, what is happening, or what action is available next.
+3. **Procedures are graph structure.** A procedure and each meaningful step are separate graph entities; order and dependencies are explicit relationships, not opaque text embedded in one node.
+4. **Goal-specific output.** The full graph is persistent, but every study path is a scoped subgraph created for a specific objective.
+5. **Local by default.** Files, extracted text, embeddings, graph entities, plans, and progress stay in local PostgreSQL. Only required prompt payloads leave the machine.
+6. **Visible uncertainty.** Low-confidence or weakly supported relationships are visually distinguishable and never silently treated as fact.
+7. **Progressive value.** A partial ingestion should still produce something inspectable. Voice and polished artifacts must not block the graph and path.
+8. **No dead-end screens.** Every application state must tell the user what happened, what is happening, or what action is available next.
 
 ---
 
@@ -136,7 +137,7 @@ If graphite can infer a sufficiently accurate, evidence-backed concept graph fro
 3. graphite shows document-level ingestion progress.
 4. graphite renders the extracted full-course graph.
 5. The student enters: “Exam tomorrow, Units 1–3, two hours, weak on recursion.”
-6. graphite identifies relevant target concepts and walks backward through prerequisite edges.
+6. graphite identifies relevant target entities and walks backward through prerequisite and procedure-order relationships.
 7. graphite removes irrelevant graph branches, orders prerequisites, and fits the route to 120 minutes.
 8. The student sees a path with time boxes and reasons for inclusion.
 9. The student opens a path step and sees a source-backed summary, flashcards, practice questions, and cited source excerpts.
@@ -168,8 +169,8 @@ If graphite can infer a sufficiently accurate, evidence-backed concept graph fro
 - Create/select one local course.
 - Upload at least PDF and Markdown/TXT; DOCX should work unless it threatens PDF reliability.
 - Parse, chunk, embed, and persist source content.
-- Extract concepts and a controlled set of typed edges.
-- Attach source evidence to concepts and edges.
+- Extract concepts, procedures, procedure steps, and a controlled set of typed relationships.
+- Attach source evidence to every displayable entity and relationship.
 - Render a usable graph with click-to-inspect evidence.
 - Accept a study goal containing scope and available time.
 - Produce a relevant subgraph and an ordered learning path.
@@ -181,7 +182,7 @@ If graphite can infer a sufficiently accurate, evidence-backed concept graph fro
 
 - Narrate a path step through ElevenLabs.
 - Provide a three-question diagnostic.
-- Store a simple mastery score per concept.
+- Store a simple mastery score per knowledge entity.
 - Recompute the route after the diagnostic.
 - Compare the full course graph with the selected goal subgraph.
 - Stream visible ingestion stage changes.
@@ -253,13 +254,13 @@ The demo succeeds when a judge can answer all five questions without explanation
 | F-01 | Upload | A supported file produces a durable document record |
 | F-02 | Parse | Extracted text is non-empty and source location metadata is retained |
 | F-03 | Embed | Every retained chunk has one embedding of the configured dimension |
-| F-04 | Extract | The pipeline produces canonical concepts and controlled edge types |
-| F-05 | Evidence | Every displayed edge has at least one evidence record or is labeled unsupported |
+| F-04 | Extract | The pipeline produces canonical entities, ordered procedures, and controlled relationship types |
+| F-05 | Evidence | Every displayed entity and relationship has evidence or is explicitly labeled unsupported/review |
 | F-06 | Graph | Refreshing the page reconstructs the graph from PostgreSQL |
 | F-07 | Goal | A user can provide objective, scope, available minutes, and weakness text |
-| F-08 | Subgraph | The returned graph excludes clearly unrelated concepts |
-| F-09 | Plan | Every plan step maps to a concept and has duration, reason, and citations |
-| F-10 | Ordering | `REQUIRES` edges are respected unless an explicit cycle fallback is shown |
+| F-08 | Subgraph | The returned graph excludes clearly unrelated entities |
+| F-09 | Plan | Every plan step maps to a knowledge entity and has duration, reason, and citations |
+| F-10 | Ordering | `REQUIRES` and procedure-local `NEXT` relationships are respected unless an explicit cycle fallback is shown |
 | F-11 | Artifact | A selected step can generate grounded study material |
 | F-12 | Failure | Model, parser, and voice errors are recoverable without restarting the app |
 
@@ -322,12 +323,12 @@ The main application is a workspace, not a chat transcript.
 
 - Original goal remains visible.
 - Show total allocated minutes and the user's budget.
-- Each step includes concept, duration, activity type, inclusion reason, prerequisite link, and source count.
+- Each step includes its knowledge entity, duration, activity type, inclusion reason, prerequisite/order link, and source count.
 - The selected subgraph is visually emphasized; unrelated full-graph nodes fade or disappear.
 
 #### E. Study mode
 
-- One concept at a time.
+- One concept, procedure, or procedure step at a time.
 - Short explanation before optional details.
 - Citations open the exact local source location when possible.
 - Flashcards reveal on click.
@@ -362,13 +363,15 @@ The main application is a workspace, not a chat transcript.
 
 ## 6. System architecture
 
+See `architecture-mental-model.md` for the human-review explanation of the relational, pgvector, AGE, UUID-bridge, read-flow, and write-flow boundaries. This document remains authoritative for product scope and implementation requirements.
+
 ### 6.1 Context diagram
 
 ```mermaid
 flowchart LR
     U["Student"] --> FE["React application"]
     FE --> API["Local FastAPI service"]
-    API --> DB[("Local PostgreSQL + pgvector")]
+    API --> DB[("Local PostgreSQL\nrelational + pgvector + AGE")]
     API --> LLM["Model provider API"]
     API --> EL["ElevenLabs API"]
 ```
@@ -397,24 +400,31 @@ flowchart TB
         Voice["Voice adapter"]
     end
 
-    DB[("PostgreSQL + pgvector")]
+    subgraph DB["One local PostgreSQL instance"]
+        Relational[("Relational tables")]
+        Vector[("pgvector")]
+        AGE[("Apache AGE graph")]
+    end
     Models["External model API"]
     Eleven["ElevenLabs"]
 
     Client --> HTTP
-    HTTP --> DB
+    HTTP --> Relational
+    HTTP --> AGE
     Jobs --> Parser
-    Parser --> DB
-    Retrieval --> DB
+    Parser --> Relational
+    Retrieval --> Vector
     Jobs --> Intelligence
     Intelligence --> Models
-    Intelligence --> DB
-    Planner --> DB
+    Intelligence --> Relational
+    Intelligence --> AGE
+    Planner --> AGE
+    Planner --> Relational
     Planner --> Models
     Artifacts --> Models
-    Artifacts --> DB
+    Artifacts --> Relational
     Voice --> Eleven
-    Voice --> DB
+    Voice --> Relational
 ```
 
 ### 6.3 Processing lifecycle
@@ -435,8 +445,8 @@ sequenceDiagram
     Worker->>Postgres: Claim job
     Worker->>Worker: Parse and chunk locally
     Worker->>Model: Embed chunks
-    Worker->>Model: Extract concepts, edges, evidence
-    Worker->>Postgres: Persist graph and mark ready
+    Worker->>Model: Extract entities, procedures, steps, relationships, evidence
+    Worker->>Postgres: Atomically persist registries/evidence and AGE topology
     React->>API: Poll job status
     API-->>React: Ready
     React->>API: GET course graph
@@ -490,7 +500,7 @@ Recommended local processes:
 
 | Process | Command concept | Responsibility |
 | --- | --- | --- |
-| PostgreSQL | `docker compose up db` | Durable application, vector, graph, and job data |
+| PostgreSQL | `docker compose up db` | Durable relational data, pgvector indexes, AGE topology, and jobs |
 | API | `uvicorn ... --reload` | HTTP endpoints and provider adapters |
 | Worker | Separate Python process | Claims durable jobs and runs ingestion |
 | Web | `npm run dev` | React UI |
@@ -499,8 +509,10 @@ The API and worker may share the same codebase. Keeping them as separate process
 
 ### 6.6 Dependency policy
 
-- PostgreSQL is the only infrastructure dependency.
-- pgvector is enabled as a PostgreSQL extension.
+- PostgreSQL is the only infrastructure process.
+- pgvector and Apache AGE are enabled as PostgreSQL extensions in one pinned Docker image.
+- Every API and worker connection initializes AGE (`LOAD 'age'` and the required search path) through the connection-pool hook.
+- Graph and relational registry writes occur in the same database transaction.
 - The model provider is accessed through one internal adapter.
 - ElevenLabs is accessed through one internal adapter.
 - No browser-to-provider calls are allowed.
@@ -515,24 +527,43 @@ The API and worker may share the same codebase. Keeping them as separate process
 ### 7.1 Entity relationship model
 
 ```mermaid
-erDiagram
-    COURSES ||--o{ DOCUMENTS : contains
-    DOCUMENTS ||--o{ CHUNKS : produces
-    COURSES ||--o{ CONCEPTS : models
-    CONCEPTS ||--o{ CONCEPT_EVIDENCE : supported_by
-    CHUNKS ||--o{ CONCEPT_EVIDENCE : cites
-    CONCEPTS ||--o{ CONCEPT_EDGES : source
-    CONCEPTS ||--o{ CONCEPT_EDGES : target
-    CONCEPT_EDGES ||--o{ EDGE_EVIDENCE : supported_by
-    CHUNKS ||--o{ EDGE_EVIDENCE : cites
-    COURSES ||--o{ STUDY_SESSIONS : plans
-    STUDY_SESSIONS ||--o{ STUDY_STEPS : contains
-    CONCEPTS ||--o{ STUDY_STEPS : teaches
-    STUDY_STEPS ||--o{ STUDY_ARTIFACTS : generates
-    COURSES ||--o{ JOBS : processes
+flowchart LR
+    subgraph SQL["Relational application model"]
+        Courses["courses"]
+        Documents["documents"]
+        Chunks["chunks + vectors"]
+        Entities["knowledge_entities"]
+        Relations["graph_relationships"]
+        Evidence["entity/relationship evidence"]
+        Sessions["study sessions, steps, artifacts"]
+        Jobs["jobs"]
+    end
+
+    subgraph Graph["Apache AGE property graph"]
+        GraphIDs["shared UUID properties"]
+        Concept((Concept))
+        Procedure((Procedure))
+        PStep((ProcedureStep))
+        Example((Example))
+        Procedure -->|HAS_STEP| PStep
+        PStep -->|NEXT| PStep
+        PStep -->|REQUIRES| Concept
+        Example -->|EXAMPLE_OF| Concept
+    end
+
+    Courses --> Documents --> Chunks
+    Courses --> Entities
+    Entities --> Evidence
+    Chunks --> Evidence
+    Courses --> Sessions
+    Courses --> Jobs
+    Entities -. "shared entity_id" .-> GraphIDs
+    Relations -. "shared relationship_id" .-> GraphIDs
 ```
 
-### 7.2 Core tables
+AGE owns graph topology: which entities are connected and in what direction. Relational tables own durable UUIDs, searchable text and embeddings, evidence, operational state, and study history. AGE vertices carry `entity_id` and `course_id`; AGE relationships carry `relationship_id`, `course_id`, `status`, `confidence`, and `graph_version`. The latter four are query projections whose canonical values remain relational. Shared UUIDs are the application-level bridge between the two models.
+
+### 7.2 Core relational tables
 
 The schema below is intentionally explicit. Exact SQL syntax may vary, but table meaning and foreign-key behavior should be frozen before parallel development begins.
 
@@ -585,55 +616,56 @@ Required constraints/indexes:
 - optional GIN full-text index for hybrid lexical retrieval;
 - do not permit embedding rows with inconsistent dimensions.
 
-#### `concepts`
+#### `knowledge_entities`
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | UUID PK | Canonical concept ID |
+| `id` | UUID PK | Canonical application-level entity ID; copied to the AGE vertex as `entity_id` |
 | `course_id` | UUID FK | Course boundary |
 | `canonical_name` | TEXT | Display and normalization anchor |
 | `normalized_name` | TEXT | Lowercase/punctuation-normalized |
+| `identity_scope_id` | UUID FK NULL | Parent procedure for a `PROCEDURE_STEP`; null for course-scoped entities |
 | `description` | TEXT | Source-grounded definition |
-| `concept_type` | TEXT | `CONCEPT`, `SKILL`, `FORMULA`, `PROCESS`, `EXAMPLE` |
+| `entity_type` | TEXT | `CONCEPT`, `SKILL`, `FORMULA`, `PROCEDURE`, `PROCEDURE_STEP`, `EXAMPLE` |
 | `importance` | REAL | 0–1 heuristic/model score |
 | `confidence` | REAL | 0–1 extraction confidence |
 | `embedding` | VECTOR(N) NULL | Used for entity resolution and goal matching |
 | `aliases` | TEXT[] | Alternate labels from notes |
+| `metadata` | JSONB | Type-specific display data; must not contain topology or the authoritative ordered step list |
 | `created_at` | TIMESTAMPTZ | Default now |
 | `updated_at` | TIMESTAMPTZ | Default now |
 
-Unique constraint should prevent duplicate `(course_id, normalized_name)`, while entity resolution still determines whether two differently normalized candidates should merge.
+Use a unique expression index over `(course_id, entity_type, normalized_name, COALESCE(identity_scope_id, NIL_UUID))`, while entity resolution still determines whether two differently normalized candidates should merge. Procedure steps use their parent procedure UUID as `identity_scope_id`; identical prose in different procedures must not collapse automatically. This parent reference scopes identity only—AGE `HAS_STEP` remains canonical for topology.
 
-#### `concept_edges`
+#### `graph_relationships`
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | UUID PK | Stable edge ID |
+| `id` | UUID PK | Stable application-level relationship ID; copied to the AGE edge as `relationship_id` |
 | `course_id` | UUID FK | Denormalized for efficient scoping |
-| `source_concept_id` | UUID FK | Directed source |
-| `target_concept_id` | UUID FK | Directed target |
 | `relation_type` | TEXT | Controlled vocabulary only |
 | `confidence` | REAL | 0–1 |
 | `rationale` | TEXT | Short grounded explanation |
 | `status` | TEXT | `ACTIVE`, `SUPPRESSED`, `REVIEW` |
+| `graph_version` | TEXT | Rebuild/version reconciliation boundary |
 | `created_at` | TIMESTAMPTZ | Default now |
 
-Unique constraint: `(source_concept_id, target_concept_id, relation_type)`.
+The source and target live canonically in the AGE relationship rather than being duplicated here. The write service validates both endpoint `entity_id` values against `knowledge_entities` before creating the registry row and AGE edge in one transaction. Because PostgreSQL foreign keys cannot target AGE vertex properties, startup and post-rebuild reconciliation must detect missing registry rows, vertices, or relationships.
 
-#### `concept_evidence`
+#### `entity_evidence`
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `concept_id` | UUID FK | Supported concept |
+| `entity_id` | UUID FK | Supported concept, procedure, procedure step, skill, formula, or example |
 | `chunk_id` | UUID FK | Cited chunk |
 | `quote_start` | INT NULL | Offset into chunk when reliable |
 | `quote_end` | INT NULL | Offset into chunk when reliable |
 | `excerpt` | TEXT | Short evidence excerpt |
 | `support_score` | REAL | 0–1 |
 
-#### `edge_evidence`
+#### `relationship_evidence`
 
-Same evidence structure, keyed by `edge_id` and `chunk_id`. An edge is displayable only if it has evidence or carries an explicit unsupported/review state.
+Same evidence structure, keyed by `relationship_id` and `chunk_id`. A relationship is displayable only if it has evidence or carries an explicit unsupported/review state.
 
 #### `jobs`
 
@@ -675,7 +707,7 @@ The worker claims rows with a transaction and `FOR UPDATE SKIP LOCKED`. Jobs lef
 | --- | --- | --- |
 | `id` | UUID PK | Step ID |
 | `session_id` | UUID FK | Parent path |
-| `concept_id` | UUID FK | Graph linkage |
+| `knowledge_entity_id` | UUID FK | Graph linkage; may identify a concept, procedure, or individual procedure step |
 | `position` | INT | Ordered route |
 | `allocated_minutes` | INT | Sum must fit budget |
 | `activity_type` | TEXT | `LEARN`, `REVIEW`, `PRACTICE`, `CHECK` |
@@ -688,14 +720,58 @@ The worker claims rows with a transaction and `FOR UPDATE SKIP LOCKED`. Jobs lef
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | UUID PK | Artifact ID |
-| `study_step_id` | UUID FK | Concept-specific |
+| `study_step_id` | UUID FK | Entity-specific |
 | `artifact_type` | TEXT | `SUMMARY`, `FLASHCARDS`, `QUESTIONS`, `NARRATION` |
 | `content` | JSONB | Structured renderable payload |
 | `citations` | JSONB | Chunk IDs and excerpts |
 | `model_metadata` | JSONB | Provider/model/latency, no secrets |
 | `created_at` | TIMESTAMPTZ | Cache boundary |
 
-### 7.3 Controlled relationship vocabulary
+### 7.3 Apache AGE topology
+
+Create one AGE graph for the application, such as `graphite`, and include `course_id` on every vertex so every query can enforce course isolation. Do not create one AGE graph per course in the MVP; a single graph avoids dynamic graph-name handling and keeps migrations predictable.
+
+Vertex labels:
+
+| AGE label | Meaning | Required properties |
+| --- | --- | --- |
+| `Concept` | Declarative idea or topic | `entity_id`, `course_id`, `name` |
+| `Skill` | Demonstrable capability | `entity_id`, `course_id`, `name` |
+| `Formula` | Named formula or rule | `entity_id`, `course_id`, `name` |
+| `Procedure` | Multi-step method or workflow | `entity_id`, `course_id`, `name` |
+| `ProcedureStep` | One independently explainable/actionable step | `entity_id`, `course_id`, `name` |
+| `Example` | Worked or illustrative instance | `entity_id`, `course_id`, `name` |
+
+Only identity and frequently filtered display properties are duplicated on vertices. Descriptions, aliases, embeddings, and evidence remain canonical in `knowledge_entities` and its related tables.
+
+Every AGE relationship must carry `relationship_id`, `course_id`, `status`, `confidence`, and `graph_version`. `status` and `graph_version` let Cypher exclude review/suppressed or stale topology during traversal; `confidence` supports bounded path selection and debug output. These properties are projections of `graph_relationships`, and reconciliation must reject a published graph version when the copies disagree.
+
+Graph write invariants:
+
+1. Generate application UUIDs before writing either model.
+2. Insert/update the relational entity and relationship registries and AGE topology in one PostgreSQL transaction.
+3. Enforce a unique AGE property index for entity identity where supported; otherwise validate uniqueness in the repository.
+4. Never expose AGE `graphid` values in APIs, fixtures, evidence rows, or study sessions; `graphid` is internal storage identity.
+5. The `GraphRepository` is the only module allowed to issue Cypher or coordinate hybrid graph writes.
+6. A failed relational or AGE write rolls back the whole unit of work.
+
+Procedure representation:
+
+```mermaid
+flowchart LR
+    P(("Procedure")) -->|HAS_STEP| S1(("Step 1"))
+    P -->|HAS_STEP| S2(("Step 2"))
+    P -->|HAS_STEP| S3(("Step 3"))
+    S1 -->|NEXT| S2
+    S2 -->|NEXT| S3
+    S1 -->|REQUIRES| C1(("Concept A"))
+    S2 -->|REQUIRES| C2(("Skill B"))
+    S3 -->|PRODUCES| O(("Outcome"))
+```
+
+`HAS_STEP` records membership; `NEXT` records instructional/execution order. Keeping both makes a procedure recoverable when one ordering edge is uncertain and allows the UI to list all steps. A procedure must have exactly one first step after validation unless it is explicitly marked incomplete. Branches are allowed only when supported by source evidence and should carry a condition property or rationale.
+
+### 7.4 Controlled relationship vocabulary
 
 The model must choose from a small enum. It must never invent edge labels.
 
@@ -708,19 +784,22 @@ The model must choose from a small enum. It must never invent edge labels.
 | `APPLIED_IN` | A → B means A is applied in B | Contextual relevance |
 | `DERIVED_FROM` | A → B means A derives from B | B normally precedes A |
 | `RELATED_TO` | Weak semantic relation | Retrieval aid; never a hard prerequisite |
+| `HAS_STEP` | Procedure → procedure step | Membership; does not by itself define order |
+| `NEXT` | Procedure step → procedure step | Hard local order within one procedure |
+| `PRODUCES` | Procedure or step → entity | Describes the result or learned outcome |
 
-Only `REQUIRES` and, when appropriate, `DERIVED_FROM` create hard planning precedence. The other relations affect relevance, grouping, or artifact selection but do not automatically determine order.
+`REQUIRES`, `NEXT`, and, when appropriate, `DERIVED_FROM` create hard planning precedence. `NEXT` applies only within the same procedure. The other relations affect relevance, grouping, or artifact selection but do not automatically determine order.
 
-### 7.4 Deletion and rebuild behavior
+### 7.5 Deletion and rebuild behavior
 
-Deleting a document must remove its chunks and evidence. A concept or edge is removed only when no remaining evidence supports it. For the hackathon, the simplest safe implementation is:
+Deleting a document must remove its chunks and evidence. An entity or relationship is removed only when no remaining evidence supports it. For the hackathon, the simplest safe implementation is:
 
 1. delete the document and derived evidence;
-2. mark potentially affected concepts/edges stale;
-3. rebuild the course graph from all remaining chunks; and
+2. mark potentially affected entity/relationship registries stale;
+3. rebuild that course's AGE vertices and relationships from all remaining chunks inside a versioned transaction; and
 4. preserve completed study sessions as historical snapshots or clearly invalidate them.
 
-Incremental perfect graph repair is out of scope.
+Incremental perfect graph repair is out of scope. Rebuild completion must run the registry/topology reconciliation check before publishing the new graph version.
 
 ---
 
@@ -733,9 +812,9 @@ flowchart LR
     File["File"] --> Parse["Parse text"]
     Parse --> Chunk["Semantic chunks"]
     Chunk --> Embed["Embeddings"]
-    Chunk --> Extract["Concept candidates"]
+    Chunk --> Extract["Entity and procedure candidates"]
     Extract --> Resolve["Canonicalize and merge"]
-    Resolve --> Relate["Typed edge extraction"]
+    Resolve --> Relate["Typed relationship and step-order extraction"]
     Relate --> Validate["Evidence and graph validation"]
     Validate --> Persist["Persist course graph"]
 ```
@@ -796,16 +875,16 @@ Chunk parameters must be configuration values and written into ingestion metadat
 - Use cosine distance consistently.
 - Keep requests within the selected provider; adding a second provider is out of scope.
 
-### 8.6 Concept extraction
+### 8.6 Knowledge-entity and procedure extraction
 
-Concept extraction is structured inference, not free-form generation. For each chunk or coherent batch, the model returns strict JSON containing:
+Extraction is structured inference, not free-form generation. For each chunk or coherent batch, the model returns strict JSON containing concepts and any source-supported procedures with independently actionable steps. A procedure must not be emitted when the source merely lists related facts without an intended order.
 
 ```json
 {
-  "concepts": [
+  "entities": [
     {
       "name": "Gradient Descent",
-      "type": "PROCESS",
+      "type": "CONCEPT",
       "description": "An optimization method that iteratively updates parameters using a loss gradient.",
       "aliases": ["GD"],
       "importance": 0.88,
@@ -817,6 +896,27 @@ Concept extraction is structured inference, not free-form generation. For each c
           "support_score": 0.96
         }
       ]
+    },
+    {
+      "name": "Perform Gradient Descent Update",
+      "type": "PROCEDURE",
+      "description": "Update model parameters for one optimization iteration.",
+      "steps": [
+        {
+          "local_key": "compute-gradient",
+          "name": "Compute the loss gradient",
+          "position": 1,
+          "requires": ["derivatives-id"],
+          "evidence": [{"chunk_id": "uuid", "excerpt": "...", "support_score": 0.95}]
+        },
+        {
+          "local_key": "update-parameters",
+          "name": "Update the parameters",
+          "position": 2,
+          "evidence": [{"chunk_id": "uuid", "excerpt": "...", "support_score": 0.94}]
+        }
+      ],
+      "evidence": [{"chunk_id": "uuid", "excerpt": "...", "support_score": 0.93}]
     }
   ]
 }
@@ -824,7 +924,10 @@ Concept extraction is structured inference, not free-form generation. For each c
 
 Validation rules:
 
-- reject unknown concept types;
+- reject unknown entity types;
+- reject a procedure whose steps lack evidence or whose order is unsupported;
+- generate separate canonical UUIDs for the procedure and every accepted procedure step;
+- convert procedure membership and order into `HAS_STEP` and `NEXT` relationships during canonicalization;
 - reject missing evidence;
 - bound all scores to 0–1;
 - limit description and excerpt lengths;
@@ -834,14 +937,14 @@ Validation rules:
 
 ### 8.7 Entity resolution
 
-Entity resolution prevents duplicate nodes such as `GD`, `gradient-descent`, and `Gradient Descent`.
+Entity resolution prevents duplicate nodes such as `GD`, `gradient-descent`, and `Gradient Descent`. Procedure steps are resolved in the context of their parent procedure so generic labels such as “Verify result” do not merge across unrelated workflows.
 
 Resolution pipeline:
 
 1. normalize case, punctuation, whitespace, and common formatting;
 2. exact-match canonical name or aliases within the same course;
-3. retrieve nearest existing concept embeddings;
-4. compare concept type, candidate description, aliases, and overlapping evidence;
+3. retrieve nearest existing entity embeddings;
+4. compare entity type, candidate description, aliases, parent procedure when applicable, and overlapping evidence;
 5. ask the model for a bounded `MERGE`, `KEEP_SEPARATE`, or `SUBTYPE` decision only for ambiguous candidates; and
 6. preserve all source aliases on merge.
 
@@ -851,14 +954,14 @@ For the MVP, `SUBTYPE` can become a separate node connected with `PART_OF` or `R
 
 ### 8.8 Relationship extraction
 
-Relationship extraction uses canonical concept IDs plus source chunks. The model returns only allowed relation types and must provide evidence.
+Relationship extraction uses canonical entity IDs plus source chunks. The model returns only allowed relation types and must provide evidence. Deterministic code creates `HAS_STEP` and adjacent `NEXT` relationships from a validated ordered procedure response; the model does not separately improvise those edges.
 
 ```json
 {
   "edges": [
     {
-      "source_concept_id": "gradient-descent-id",
-      "target_concept_id": "derivatives-id",
+      "source_entity_id": "gradient-descent-id",
+      "target_entity_id": "derivatives-id",
       "relation_type": "REQUIRES",
       "confidence": 0.91,
       "rationale": "Understanding derivatives is necessary to interpret the update rule.",
@@ -881,6 +984,8 @@ Direction must be tested with examples. Under this specification, `A REQUIRES B`
 Before activation:
 
 - confirm source and target belong to the same course;
+- confirm `HAS_STEP` targets are `PROCEDURE_STEP` entities and both endpoints belong to the same course;
+- confirm each active procedure has one entry step, contains all of its steps through `HAS_STEP`, and has no unsupported `NEXT` branch;
 - reject self-loops unless explicitly allowed for a relation type; default to reject;
 - deduplicate identical typed edges;
 - confirm evidence chunks belong to the course;
@@ -888,6 +993,7 @@ Before activation:
 - detect strongly connected components in hard precedence edges;
 - suppress the lowest-confidence edge in each hard cycle for planning while retaining it for inspection; and
 - record the extraction and validation versions.
+- reconcile relational registry UUIDs with AGE vertex/relationship UUID properties before publishing the graph version.
 
 ### 8.10 Prompt-injection handling
 
@@ -909,7 +1015,7 @@ Data stored locally:
 - original uploaded files;
 - extracted text;
 - chunks and embeddings;
-- concepts and edges;
+- knowledge entities, AGE topology, and relationship registries;
 - study sessions and generated artifacts;
 - narration cache; and
 - operational logs with redacted payloads.
@@ -917,7 +1023,7 @@ Data stored locally:
 Data sent externally:
 
 - selected source chunks for embeddings or structured model inference;
-- structured concept/edge context for planning and artifact generation; and
+- structured entity/relationship context for planning and artifact generation; and
 - generated narration text sent to ElevenLabs.
 
 Never send:
@@ -952,40 +1058,42 @@ Do not rely on extracting time perfectly from prose; the UI should expose a nume
 
 ### 9.2 Target retrieval
 
-Use hybrid retrieval across:
+Use relational hybrid retrieval across `knowledge_entities` and `chunks` to identify seed entity UUIDs, then pass those UUIDs to AGE for topology expansion. Score across:
 
-- concept embedding similarity to the goal;
+- knowledge-entity embedding similarity to the goal;
 - chunk embedding similarity to the goal;
 - lexical matches for unit/chapter/heading labels;
-- concept importance;
+- knowledge-entity importance;
 - document filters selected by the user; and
 - user-stated weakness matches.
 
 A simple weighted score is adequate:
 
 \[
-S(c) = 0.40V_c + 0.25V_s + 0.15L + 0.10I + 0.10W
+S(e) = 0.40V_e + 0.25V_s + 0.15L + 0.10I + 0.10W
 \]
 
 Where:
 
-- \(V_c\): concept-vector similarity;
+- \(V_e\): knowledge-entity vector similarity;
 - \(V_s\): strongest supporting chunk similarity;
 - \(L\): lexical/scope match;
-- \(I\): concept importance; and
+- \(I\): knowledge-entity importance; and
 - \(W\): weakness match.
 
 Weights are configuration, not product truth. Validate them against the prepared demo course.
 
 ### 9.3 Subgraph construction
 
-1. Select the top goal-relevant target concepts above a minimum score.
-2. Walk backward across `REQUIRES` and `DERIVED_FROM` edges to a bounded depth.
-3. Include supporting parent/group concepts through `PART_OF` when they improve explanation.
-4. Include weakness-matched concepts even if their raw relevance score is slightly lower.
-5. Remove isolated low-score nodes.
-6. Cap total nodes to maintain legibility and prompt bounds.
-7. Preserve every edge and node citation used in the final subgraph.
+1. Select the top goal-relevant entity UUIDs above a minimum score from relational/vector retrieval.
+2. Use an AGE Cypher query to walk backward across `REQUIRES` and `DERIVED_FROM` relationships to a bounded depth.
+3. If a selected entity is a procedure or procedure step, include its `HAS_STEP` membership, required `NEXT` chain, and step-specific prerequisites.
+4. Include supporting parent/group concepts through `PART_OF` when they improve explanation.
+5. Include weakness-matched entities even if their raw relevance score is slightly lower.
+6. Remove isolated low-score nodes.
+7. Cap total nodes to maintain legibility and prompt bounds.
+8. Hydrate AGE results from relational metadata/evidence by application UUID; never join through AGE `graphid`.
+9. Preserve every relationship and entity citation used in the final subgraph.
 
 Recommended starting limits:
 
@@ -1003,14 +1111,16 @@ Semantic edge:      Gradient Descent REQUIRES Derivatives
 Planning edge:      Derivatives -> Gradient Descent
 ```
 
-Then:
+AGE retrieves the bounded planning subgraph; deterministic Python code owns policy-sensitive cycle resolution, topological ordering, tie-breaking, and time allocation. Then:
 
-1. create the planning DAG from active hard edges;
+1. create the planning DAG from active `REQUIRES`, applicable `DERIVED_FROM`, and procedure-local `NEXT` relationships;
 2. detect cycles;
 3. suppress the lowest-confidence edge participating in a cycle for this plan;
 4. topologically sort the remaining graph;
 5. break ties using weakness, relevance, importance, and dependency centrality; and
-6. record any suppressed edges in the plan explanation.
+6. record any suppressed relationships in the plan explanation.
+
+Procedure steps remain contiguous when practical. A hard prerequisite of a procedure step must occur before that step, but unrelated material should not be inserted between adjacent `NEXT` steps unless the plan explicitly explains the interruption.
 
 The model may help estimate difficulty or select activity types, but it must not override a validated hard prerequisite without producing an explicit exception.
 
@@ -1037,7 +1147,7 @@ The topological constraints decide what **may** come next; the priority score de
 Each step gets:
 
 - a minimum useful duration, such as 5 minutes;
-- a base duration by concept type/difficulty;
+- a base duration by entity type/difficulty;
 - additional time for weakness and downstream importance; and
 - reduced time for known/mastered concepts.
 
@@ -1220,7 +1330,7 @@ Voice input is P2. If implemented, it must produce the same objective payload as
     {
       "id": "uuid",
       "name": "Gradient Descent",
-      "type": "PROCESS",
+      "type": "PROCEDURE",
       "description": "...",
       "importance": 0.88,
       "confidence": 0.94,
@@ -1231,8 +1341,8 @@ Voice input is P2. If implemented, it must produce the same objective payload as
   "edges": [
     {
       "id": "uuid",
-      "source": "concept-uuid",
-      "target": "concept-uuid",
+      "source": "entity-uuid",
+      "target": "entity-uuid",
       "relation_type": "REQUIRES",
       "confidence": 0.91,
       "rationale": "...",
@@ -1277,8 +1387,9 @@ Voice input is P2. If implemented, it must produce the same objective payload as
     {
       "id": "uuid",
       "position": 1,
-      "concept_id": "uuid",
-      "concept_name": "Recursion",
+      "knowledge_entity_id": "uuid",
+      "entity_name": "Recursion",
+      "entity_type": "CONCEPT",
       "allocated_minutes": 20,
       "activity_type": "REVIEW",
       "reason": "Stated weakness and prerequisite for Trees",
@@ -1289,9 +1400,9 @@ Voice input is P2. If implemented, it must produce the same objective payload as
     "nodes": [],
     "edges": []
   },
-  "omitted_concepts": [
+  "omitted_entities": [
     {
-      "concept_id": "uuid",
+      "knowledge_entity_id": "uuid",
       "reason": "Lower priority than available time permits"
     }
   ]
@@ -1344,9 +1455,9 @@ flowchart TB
 
 **Owns:**
 
-- Docker Compose PostgreSQL + pgvector configuration;
+- pinned Docker Compose PostgreSQL configuration with pgvector and Apache AGE;
 - migrations and seed data;
-- course, document, chunk, evidence, job, and base graph persistence;
+- course, document, chunk, entity/relationship registry, evidence, job, and AGE topology persistence;
 - file upload, validation, hashing, and local storage;
 - PDF/DOCX/TXT/MD parsing;
 - chunking and source-location metadata;
@@ -1368,7 +1479,7 @@ flowchart TB
 
 **Inputs from others:**
 
-- Person 2 supplies pure/typed intelligence functions or a service interface for concept and edge extraction.
+- Person 2 supplies pure/typed intelligence functions or a service interface for entity, procedure, and relationship extraction.
 - Team supplies frozen embedding model and dimension.
 
 **Outputs to others:**
@@ -1389,7 +1500,7 @@ flowchart TB
 **Definition of done:**
 
 1. `docker compose up db` succeeds on a clean machine.
-2. Migrations enable pgvector and create all required tables.
+2. Migrations enable pgvector and AGE, create the `graphite` AGE graph, and create all required relational tables.
 3. Upload returns IDs immediately and the worker advances through visible stages.
 4. Parsing retains page or section references.
 5. A worker restart does not permanently strand a job.
@@ -1406,12 +1517,12 @@ flowchart TB
 - provider-neutral model client interface and configured provider implementation;
 - structured prompt templates;
 - typed model response schemas;
-- concept extraction;
+- concept, procedure, and procedure-step extraction;
 - entity resolution and canonicalization;
-- typed relationship extraction;
+- typed relationship extraction and deterministic procedure topology construction;
 - evidence validation and confidence thresholds;
 - graph validation, cycle detection, and edge suppression policy;
-- goal parsing and hybrid concept-scoring logic;
+- goal parsing and hybrid entity-scoring logic;
 - prerequisite expansion and goal-subgraph construction;
 - topological ordering and time allocation;
 - plan explanations and omitted-concept reporting;
@@ -1435,9 +1546,10 @@ flowchart TB
 **Outputs to others:**
 
 - typed functions/services:
-  - `extract_concepts(chunks) -> ConceptCandidates`;
-  - `resolve_concepts(candidates, existing) -> ResolutionPlan`;
-  - `extract_edges(concepts, chunks) -> EdgeCandidates`;
+  - `extract_entities(chunks) -> EntityCandidates`;
+  - `resolve_entities(candidates, existing) -> ResolutionPlan`;
+  - `extract_relationships(entities, chunks) -> RelationshipCandidates`;
+  - `build_procedure_topology(procedure) -> ProcedureRelationships`;
   - `validate_graph(graph) -> ValidatedGraph`;
   - `build_study_session(goal, graph, retrieval) -> StudySessionDTO`;
   - `generate_artifact(step, evidence, type) -> ArtifactDTO`;
@@ -1456,13 +1568,14 @@ flowchart TB
 **Definition of done:**
 
 1. All model outputs are schema-validated.
-2. Every activated concept and edge has valid evidence.
-3. Duplicate aliases merge in the golden fixture without collapsing distinct subtypes.
-4. Hard cycles produce a deterministic, logged suppression decision.
-5. A path respects prerequisites and fits the minute budget.
-6. The same fixture and goal produce stable structural output.
-7. Artifact content cites only supplied chunk IDs.
-8. Narration works when configured and degrades cleanly when absent.
+2. Every activated entity and relationship has valid evidence.
+3. Each complete procedure fixture has correct `HAS_STEP` membership and an evidence-backed `NEXT` chain.
+4. Duplicate aliases merge in the golden fixture without collapsing distinct subtypes or unrelated generic step names.
+5. Hard cycles produce a deterministic, logged suppression decision.
+6. A path respects prerequisites and procedure order and fits the minute budget.
+7. The same fixture and goal produce stable structural output.
+8. Artifact content cites only supplied chunk IDs.
+9. Narration works when configured and degrades cleanly when absent.
 
 ### 12.4 Person 3 — React Product Experience and Demo Owner
 
@@ -1546,11 +1659,11 @@ Only the following are shared; every other item has one owner:
 
 | Capability | Person 1 | Person 2 | Person 3 |
 | --- | --- | --- | --- |
-| PostgreSQL/pgvector | **A/R** | C | I |
+| PostgreSQL/pgvector/AGE | **A/R** | C | I |
 | File parsing/chunking | **A/R** | C | I |
 | Embedding orchestration | **A/R** | C | I |
 | Model adapter semantics | C | **A/R** | I |
-| Concept/edge extraction | C | **A/R** | I |
+| Entity/procedure/relationship extraction | C | **A/R** | I |
 | Graph persistence | **A/R** | C | I |
 | Graph algorithms | C | **A/R** | I |
 | Study artifacts | I | **A/R** | C |
@@ -1743,9 +1856,9 @@ Business logic must not import a provider SDK directly.
 | Call | Timing | Input | Output | Cache key |
 | --- | --- | --- | --- | --- |
 | Chunk embeddings | Ingestion | Normalized chunks | Vectors | text hash + model |
-| Concept extraction | Ingestion | Bounded chunk batch | Candidates/evidence | chunk hashes + prompt version |
-| Entity decision | Ambiguous merge only | Candidate + nearest concepts | Merge decision | candidate/existing/version |
-| Edge extraction | Ingestion | Canonical concepts + chunks | Typed edges/evidence | graph inputs + prompt version |
+| Entity/procedure extraction | Ingestion | Bounded chunk batch | Candidates/evidence/ordered steps | chunk hashes + prompt version |
+| Entity decision | Ambiguous merge only | Candidate + nearest entities | Merge decision | candidate/existing/version |
+| Relationship extraction | Ingestion | Canonical entities + chunks | Typed relationships/evidence | graph inputs + prompt version |
 | Goal parsing | Session creation | Goal text | Structured goal | goal hash + prompt version |
 | Optional ranking | Session creation | Bounded subgraph context | Scores/difficulty | graph version + goal hash |
 | Artifact generation | On demand | Step + evidence | Structured artifact | step/evidence/type/version |
@@ -1756,7 +1869,7 @@ Business logic must not import a provider SDK directly.
 - Batch chunks, but keep prompts small enough to preserve evidence locality.
 - Generate artifacts on demand.
 - Do not regenerate the course graph when only the goal changes.
-- Cap extracted concepts per chunk/batch.
+- Cap extracted entities and procedure steps per chunk/batch.
 - Cap entity-resolution candidates.
 - Retry malformed JSON once, not indefinitely.
 - Expose timing logs locally for debugging.
@@ -1766,9 +1879,9 @@ Business logic must not import a provider SDK directly.
 
 Store prompt identifiers such as:
 
-- `concept-extract-v1`;
+- `entity-procedure-extract-v1`;
 - `entity-resolve-v1`;
-- `edge-extract-v1`;
+- `relationship-extract-v1`;
 - `goal-parse-v1`; and
 - `artifact-summary-v1`.
 
@@ -1860,6 +1973,9 @@ Do not log:
 | Worker crashes | Stuck document | Durable jobs and stale-lock recovery | P0 |
 | Provider rate limit | Slow/failed ingestion | Batching, cache, backoff, prepared demo data | P0 |
 | pgvector dimension mismatch | Insert failure | Freeze model/dimension and validate startup config | P0 |
+| AGE/pgvector image incompatibility | Database cannot start cleanly | Pin PostgreSQL and both extension versions; test the exact image on a clean teammate machine | P0 |
+| AGE topology and relational registry drift | Missing metadata/evidence or broken graph response | Shared UUIDs, one-transaction writes, repository-only Cypher, and reconciliation before publishing a graph version | P0 |
+| Ambiguous procedure order | Misleading study sequence | Require step-level evidence; mark incomplete/branching procedures for review instead of inventing a linear chain | P0 |
 | Browser exposes key | Security incident | Backend-only provider adapters | P0 |
 | Voice fails | Optional feature unavailable | Text-first study mode | P1 |
 | Source file deleted locally | Broken citation | Managed upload directory and deletion through API only | P0 |
@@ -1986,14 +2102,14 @@ Then show:
 | 1:10–1:35 | Evidence-backed edge inspection |
 | 1:35–2:25 | Goal submission and graph-to-route transformation |
 | 2:25–3:05 | Study step, citations, artifacts, optional narration |
-| 3:05–3:35 | Architecture: local PostgreSQL/pgvector + deterministic planning |
+| 3:05–3:35 | Architecture: one local PostgreSQL with relational tables, pgvector, AGE, and deterministic planning |
 | 3:35–4:00 | Productivity impact and rerouting future |
 
 ### 19.3 Technical explanation for judges
 
 Use this language:
 
-> “The model interprets source material into schema-validated concepts and evidence-backed typed relationships. PostgreSQL with pgvector stores both retrieval vectors and graph-shaped relational data. When a student gives us a destination, we retrieve a relevant subgraph, traverse prerequisite edges backward, break low-confidence cycles, topologically order the result, and allocate the student's time. The model explains and creates practice material, but it does not independently invent the full route.”
+> “The model interprets source material into schema-validated concepts, procedures, individual steps, and evidence-backed relationships. One local PostgreSQL instance holds relational source and workflow records, pgvector retrieval indexes, and an Apache AGE property graph. Shared UUIDs connect graph entities to their source evidence. When a student gives us a destination, we retrieve relevant entities, use Cypher to expand the prerequisite and procedure subgraph, then deterministically resolve cycles, preserve step order, and allocate the student's time. The model explains and creates practice material, but it does not independently invent the route.”
 
 ### 19.4 Prepared and live modes
 
@@ -2063,9 +2179,10 @@ Never make the core value depend on a cold model call finishing on stage.
 | Decision | Chosen | Rejected/Deferred | Rationale |
 | --- | --- | --- | --- |
 | Product center | Graph-derived route | Chat-first interface | Route is differentiated and demoable |
-| Database | PostgreSQL + pgvector | Neo4j + vector DB | One local dependency is enough |
+| Database | PostgreSQL + pgvector + Apache AGE | Neo4j + separate vector DB | One local database process supports relational, vector, and property-graph workloads |
+| Graph boundary | AGE topology + relational UUID registries/evidence | Relational adjacency tables only; AGE properties for all application data | Cypher owns connections while relational tables retain vectors, citations, jobs, and stable application identity |
 | Processing | Durable Postgres jobs | Redis/Celery/Kafka | Lower infrastructure friction |
-| Knowledge unit | Canonical concept | Raw document chunk | Chunks are evidence, not graph entities |
+| Knowledge unit | Canonical entity, including procedure and procedure step | Raw document chunk; procedure stored as one text blob | Chunks are evidence, while explicit steps and relationships support procedural traversal |
 | Edge source | Model extraction + evidence validation | Embedding similarity alone | Similarity does not imply dependency |
 | Planning | Graph algorithms + bounded model assistance | One “make a plan” prompt | Stable, explainable order |
 | Integrations | File exports | Notion/Notability OAuth | Honors external-service boundary |
@@ -2085,10 +2202,12 @@ These are intentionally few. Resolve them during contract freeze:
 4. Which course/topic provides the clearest prepared prerequisite graph?
 5. Is DOCX truly P0, or should PDF + MD/TXT be the reliability target?
 6. What maximum file size and page count are safe for the event's model budget?
-7. Will the graph show concept type, relation type, or mastery as its primary color dimension?
-8. Is rerouting from a diagnostic P1, or only a narrated study step?
-9. Who owns `PATCH /study-steps/{id}` after contract freeze?
-10. Does the event require a deployed URL, or is a local demonstration accepted? This document assumes local execution is allowed.
+7. Will the graph show entity type, relation type, or mastery as its primary color dimension?
+8. Which exact PostgreSQL, pgvector, and Apache AGE versions/image are frozen for the demo?
+9. How should the UI render evidence-backed branching or conditional procedures without implying a false linear order?
+10. Is rerouting from a diagnostic P1, or only a narrated study step?
+11. Who owns `PATCH /study-steps/{id}` after contract freeze?
+12. Does the event require a deployed URL, or is a local demonstration accepted? This document assumes local execution is allowed.
 
 ---
 
@@ -2107,7 +2226,10 @@ These are intentionally few. Resolve them during contract freeze:
 ### Engineering
 
 - [ ] Clean setup instructions were tested on a second teammate's machine.
-- [ ] PostgreSQL starts with pgvector enabled.
+- [ ] PostgreSQL starts with pgvector and Apache AGE enabled from the pinned image.
+- [ ] Every API/worker connection initializes AGE correctly.
+- [ ] Registry/topology reconciliation passes for the seeded graph.
+- [ ] The prepared procedure fixture renders all `HAS_STEP` and `NEXT` relationships in order.
 - [ ] Migrations and seeds are idempotent or safely repeatable.
 - [ ] `.env.example` lists every required variable.
 - [ ] No secrets appear in Git history or the browser bundle.
@@ -2119,7 +2241,7 @@ These are intentionally few. Resolve them during contract freeze:
 ### Presentation
 
 - [ ] The team can explain why graphite is not ordinary RAG.
-- [ ] The team can explain why pgvector and graph tables coexist.
+- [ ] The team can explain why relational tables, pgvector, and AGE coexist and what each owns.
 - [ ] The team can explain which decisions are deterministic.
 - [ ] The live upload is small and non-critical.
 - [ ] The backup seeded course is ready.
@@ -2145,4 +2267,3 @@ flowchart TD
 Everything else is subordinate.
 
 If a feature does not improve source ingestion, graph correctness, route quality, trust, or the clarity of that transformation, it is not an MVP feature. The winning version of graphite is not the version with the most integrations or generated content. It is the version that takes a student from “I have too much material and do not know where to start” to a defensible first action in under two minutes.
-
