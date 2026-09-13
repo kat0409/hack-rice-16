@@ -1,0 +1,362 @@
+-- Core relational schema for graphite.
+--
+-- Source of truth: design-doc.md §7.2 (table-by-table spec) and §7.3-7.5 (graph
+-- bridge, vocabulary, rebuild behavior). Table and column names, types, and
+-- nullability follow that section as closely as SQL allows. Every deliberate
+-- deviation or addition beyond what §7.2 literally specifies is called out in a
+-- COMMENT ON attached to the relevant object, so it is visible from psql/\d+ and
+-- not just in a report that can drift out of sync with the code.
+--
+-- __EMBEDDING_DIMENSIONS__ is substituted by 10_run_schema.sh from the
+-- EMBEDDING_DIMENSIONS environment variable before this file reaches psql. It is
+-- NOT a real placeholder syntax psql understands on its own.
+--
+-- search_path is pinned explicitly rather than relying on the connection default.
+-- This is load-bearing, not stylistic: Apache AGE's create_graph() creates a real
+-- Postgres schema named after the graph (here, "graphite" — see 01_age_graph.sql),
+-- and the default search_path's "$user" fallback resolves to a schema of that same
+-- name whenever POSTGRES_USER also happens to equal the graph name (true of the
+-- .env.example default, "graphite"/"graphite"). Without this line every table
+-- below silently gets created inside AGE's graph schema instead of public — this
+-- was caught by actually running this init against a live container while
+-- building this scaffolding, not by inspection.
+SET search_path = public;
+
+-- Generic updated_at maintenance, used by every table that has the column.
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.updated_at := now();
+    RETURN NEW;
+END;
+$$;
+
+-- =============================================================================
+-- courses
+-- =============================================================================
+CREATE TABLE courses (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        TEXT NOT NULL,
+    description TEXT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER trg_courses_updated_at
+    BEFORE UPDATE ON courses
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+
+-- =============================================================================
+-- documents
+-- =============================================================================
+CREATE TABLE documents (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id     UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    filename      TEXT NOT NULL,
+    mime_type     TEXT NOT NULL,
+    sha256        TEXT NOT NULL,
+    local_path    TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'UPLOADED'
+                  CHECK (status IN ('UPLOADED', 'PARSING', 'CHUNKING', 'EMBEDDING',
+                                     'EXTRACTING', 'RESOLVING', 'READY', 'FAILED')),
+    error_code    TEXT NULL,
+    error_message TEXT NULL,
+    page_count    INT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT documents_course_sha256_unique UNIQUE (course_id, sha256)
+);
+
+COMMENT ON CONSTRAINT documents_course_sha256_unique ON documents IS
+    'design-doc.md §7.2 lists sha256 as "duplicate detection" without stating the '
+    'scope; scoped to (course_id, sha256) so the same file can exist in two '
+    'different courses. Confirm this matches product intent before relying on it.';
+
+CREATE INDEX idx_documents_course_id ON documents (course_id);
+CREATE INDEX idx_documents_status ON documents (status);
+
+-- =============================================================================
+-- chunks
+-- =============================================================================
+CREATE TABLE chunks (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    document_id   UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    chunk_index   INT NOT NULL,
+    text          TEXT NOT NULL,
+    token_count   INT NOT NULL,
+    page_start    INT NULL,
+    page_end      INT NULL,
+    section_path  TEXT NULL,
+    embedding     VECTOR(__EMBEDDING_DIMENSIONS__) NULL,
+    metadata      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    text_search   TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', text)) STORED,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT chunks_document_chunk_index_unique UNIQUE (document_id, chunk_index)
+);
+
+COMMENT ON COLUMN chunks.embedding IS
+    'Fixed-width vector(N) enforces design-doc.md §7.2''s "do not permit embedding '
+    'rows with inconsistent dimensions" constraint at the type level: Postgres '
+    'rejects an INSERT/UPDATE whose vector length does not match N. Nullable '
+    'because a chunk exists before it is embedded (EMBEDDING ingestion stage).';
+
+COMMENT ON COLUMN chunks.text_search IS
+    'Backs the "L: lexical/scope match" term in design-doc.md §9.2''s retrieval '
+    'score and the optional GIN full-text index called out in §7.2. Not in the '
+    'literal §7.2 column list; added because §9.2 depends on it existing somewhere.';
+
+CREATE INDEX idx_chunks_document_id ON chunks (document_id);
+
+-- =============================================================================
+-- knowledge_entities
+-- =============================================================================
+CREATE TABLE knowledge_entities (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id         UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    canonical_name    TEXT NOT NULL,
+    normalized_name   TEXT NOT NULL,
+    identity_scope_id UUID NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+    description       TEXT NOT NULL,
+    entity_type       TEXT NOT NULL
+                      CHECK (entity_type IN ('CONCEPT', 'SKILL', 'FORMULA', 'PROCEDURE',
+                                               'PROCEDURE_STEP', 'EXAMPLE')),
+    importance        REAL NOT NULL DEFAULT 0 CHECK (importance BETWEEN 0 AND 1),
+    confidence        REAL NOT NULL DEFAULT 0 CHECK (confidence BETWEEN 0 AND 1),
+    embedding         VECTOR(__EMBEDDING_DIMENSIONS__) NULL,
+    aliases           TEXT[] NOT NULL DEFAULT '{}',
+    metadata          JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE knowledge_entities IS
+    'Relational registry for AGE vertices. id is copied onto the AGE vertex as '
+    'entity_id (architecture-mental-model.md §4, the "shared-UUID bridge") — '
+    'PostgreSQL cannot enforce that link with a real foreign key, so GraphRepository '
+    'is the only code path allowed to write both sides in one transaction '
+    '(design-doc.md §7.3 "Graph write invariants"). '
+    'OPEN GAP (flag for the team): this table has no lifecycle/status column, but '
+    'design-doc.md §7.5 rebuild behavior requires marking entities "stale" and '
+    'removing them "only when no remaining evidence supports" them. graph_relationships '
+    'has a status column for exactly this; knowledge_entities does not. Decide '
+    'whether entities are hard-deleted, soft-deleted via a new status column, or '
+    'something else before building the rebuild path — see study_steps.knowledge_entity_id '
+    'below, which currently assumes entities are never destructively deleted while '
+    'referenced by history.';
+
+COMMENT ON COLUMN knowledge_entities.identity_scope_id IS
+    'Scopes identity only (design-doc.md §7.2): a PROCEDURE_STEP''s parent procedure '
+    'UUID, so identical step prose in two different procedures does not collapse '
+    'into one entity. AGE HAS_STEP remains the canonical membership relationship; '
+    'this column must never be treated as topology.';
+
+-- Unique identity per design-doc.md §7.2: "unique expression index over
+-- (course_id, entity_type, normalized_name, COALESCE(identity_scope_id, NIL_UUID))".
+-- The all-zero UUID below is that NIL_UUID sentinel.
+CREATE UNIQUE INDEX idx_knowledge_entities_identity
+    ON knowledge_entities (
+        course_id,
+        entity_type,
+        normalized_name,
+        COALESCE(identity_scope_id, '00000000-0000-0000-0000-000000000000'::uuid)
+    );
+
+CREATE INDEX idx_knowledge_entities_course_id ON knowledge_entities (course_id);
+CREATE INDEX idx_knowledge_entities_identity_scope_id ON knowledge_entities (identity_scope_id);
+CREATE INDEX idx_knowledge_entities_aliases_gin ON knowledge_entities USING GIN (aliases);
+
+CREATE TRIGGER trg_knowledge_entities_updated_at
+    BEFORE UPDATE ON knowledge_entities
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+
+-- =============================================================================
+-- graph_relationships
+-- =============================================================================
+CREATE TABLE graph_relationships (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id     UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    relation_type TEXT NOT NULL
+                  CHECK (relation_type IN ('REQUIRES', 'PART_OF', 'EXAMPLE_OF',
+                                             'CONTRASTS_WITH', 'APPLIED_IN', 'DERIVED_FROM',
+                                             'RELATED_TO', 'HAS_STEP', 'NEXT', 'PRODUCES')),
+    confidence    REAL NOT NULL CHECK (confidence BETWEEN 0 AND 1),
+    rationale     TEXT NULL,
+    status        TEXT NOT NULL DEFAULT 'ACTIVE'
+                  CHECK (status IN ('ACTIVE', 'SUPPRESSED', 'REVIEW')),
+    graph_version TEXT NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+COMMENT ON TABLE graph_relationships IS
+    'Deliberately has no source/target columns: design-doc.md §7.2 states the '
+    'endpoints "live canonically in the AGE relationship". id is copied onto the '
+    'AGE edge as relationship_id. status/confidence/graph_version here are the '
+    'canonical values; the copies on the AGE edge (architecture-mental-model.md §3) '
+    'are query-projections that reconciliation must keep in sync — do not let '
+    'application code treat the AGE-side copies as writable.';
+
+CREATE INDEX idx_graph_relationships_course_id ON graph_relationships (course_id);
+CREATE INDEX idx_graph_relationships_course_status ON graph_relationships (course_id, status);
+CREATE INDEX idx_graph_relationships_graph_version ON graph_relationships (graph_version);
+
+-- =============================================================================
+-- entity_evidence
+-- =============================================================================
+CREATE TABLE entity_evidence (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entity_id     UUID NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+    chunk_id      UUID NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+    quote_start   INT NULL,
+    quote_end     INT NULL,
+    excerpt       TEXT NOT NULL,
+    support_score REAL NOT NULL CHECK (support_score BETWEEN 0 AND 1)
+);
+
+COMMENT ON TABLE entity_evidence IS
+    'design-doc.md §7.2 does not list an id column for this table; added a '
+    'surrogate UUID PK for stable row identity (API references, updates) since the '
+    'natural key (entity_id, chunk_id) is not unique — one entity can cite the '
+    'same chunk more than once at different offsets.';
+
+CREATE INDEX idx_entity_evidence_entity_id ON entity_evidence (entity_id);
+CREATE INDEX idx_entity_evidence_chunk_id ON entity_evidence (chunk_id);
+
+-- =============================================================================
+-- relationship_evidence
+-- =============================================================================
+CREATE TABLE relationship_evidence (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    relationship_id UUID NOT NULL REFERENCES graph_relationships(id) ON DELETE CASCADE,
+    chunk_id        UUID NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+    quote_start     INT NULL,
+    quote_end       INT NULL,
+    excerpt         TEXT NOT NULL,
+    support_score   REAL NOT NULL CHECK (support_score BETWEEN 0 AND 1)
+);
+
+CREATE INDEX idx_relationship_evidence_relationship_id ON relationship_evidence (relationship_id);
+CREATE INDEX idx_relationship_evidence_chunk_id ON relationship_evidence (chunk_id);
+
+-- =============================================================================
+-- jobs
+-- =============================================================================
+CREATE TABLE jobs (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id    UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    document_id  UUID NULL REFERENCES documents(id) ON DELETE CASCADE,
+    job_type     TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'QUEUED'
+                 CHECK (status IN ('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED')),
+    stage        TEXT NULL,
+    attempts     INT NOT NULL DEFAULT 0,
+    payload      JSONB NOT NULL DEFAULT '{}'::jsonb,
+    error        JSONB NULL,
+    locked_at    TIMESTAMPTZ NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ NULL
+);
+
+COMMENT ON COLUMN jobs.job_type IS
+    'design-doc.md §7.2 gives an open-ended example list ("INGEST_DOCUMENT, '
+    'REBUILD_GRAPH, etc.") rather than a closed set, so no CHECK enum is applied '
+    'here — unlike status, which the doc treats as closed. Validate job_type in '
+    'application code if a fixed set is decided later.';
+
+CREATE INDEX idx_jobs_course_id ON jobs (course_id);
+CREATE INDEX idx_jobs_document_id ON jobs (document_id);
+-- Supports design-doc.md §7.2's `FOR UPDATE SKIP LOCKED` claim query.
+CREATE INDEX idx_jobs_queue_claim ON jobs (created_at) WHERE status = 'QUEUED';
+-- Supports the stale-RUNNING-job recovery scan described alongside the same table.
+CREATE INDEX idx_jobs_stale_running ON jobs (locked_at) WHERE status = 'RUNNING';
+
+-- =============================================================================
+-- study_sessions
+-- =============================================================================
+CREATE TABLE study_sessions (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id          UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    goal_text          TEXT NOT NULL,
+    scope_text         TEXT NULL,
+    available_minutes  INT NOT NULL CHECK (available_minutes > 0),
+    weakness_text      TEXT NULL,
+    planner_version    TEXT NOT NULL,
+    status             TEXT NOT NULL DEFAULT 'PENDING'
+                       CHECK (status IN ('PENDING', 'READY', 'FAILED')),
+    explanation        TEXT NULL,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+COMMENT ON COLUMN study_sessions.status IS
+    'design-doc.md §7.2 says only "Generation state" without enumerating values; '
+    'PENDING/READY/FAILED is inferred from the §11.5 example response showing '
+    '"status": "READY". Confirm this is the full set before the planner ships.';
+
+COMMENT ON COLUMN study_sessions.explanation IS
+    'design-doc.md §7.2 does not mark this NULL, but a session is created before '
+    'the route (and therefore its explanation) exists — made nullable to represent '
+    'the PENDING state honestly instead of storing a placeholder string.';
+
+CREATE INDEX idx_study_sessions_course_id ON study_sessions (course_id);
+CREATE INDEX idx_study_sessions_course_created_at ON study_sessions (course_id, created_at);
+
+-- =============================================================================
+-- study_steps
+-- =============================================================================
+CREATE TABLE study_steps (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id           UUID NOT NULL REFERENCES study_sessions(id) ON DELETE CASCADE,
+    knowledge_entity_id  UUID NOT NULL REFERENCES knowledge_entities(id) ON DELETE RESTRICT,
+    position             INT NOT NULL CHECK (position > 0),
+    allocated_minutes    INT NOT NULL CHECK (allocated_minutes >= 0),
+    activity_type        TEXT NOT NULL
+                         CHECK (activity_type IN ('LEARN', 'REVIEW', 'PRACTICE', 'CHECK')),
+    reason               TEXT NOT NULL,
+    priority_score       REAL NOT NULL DEFAULT 0,
+    status               TEXT NOT NULL DEFAULT 'TODO'
+                         CHECK (status IN ('TODO', 'ACTIVE', 'COMPLETE', 'SKIPPED')),
+
+    CONSTRAINT study_steps_session_position_unique UNIQUE (session_id, position)
+);
+
+COMMENT ON CONSTRAINT study_steps_knowledge_entity_id_fkey ON study_steps IS
+    'ON DELETE RESTRICT, not CASCADE, and deliberately so: design-doc.md §7.5 '
+    'requires completed study sessions to be "preserved as historical snapshots" '
+    'across a graph rebuild. A cascading delete here would silently erase a '
+    'student''s history the moment its underlying entity is pruned. This means the '
+    'rebuild path in §7.5 cannot simply DELETE a stale knowledge_entities row that '
+    'still has study_steps pointing at it — it must either keep the row (paired '
+    'with the status-column gap noted on knowledge_entities above) or explicitly '
+    'invalidate the referencing sessions first. Flagging for team validation.';
+
+CREATE INDEX idx_study_steps_session_id ON study_steps (session_id);
+CREATE INDEX idx_study_steps_knowledge_entity_id ON study_steps (knowledge_entity_id);
+
+-- =============================================================================
+-- study_artifacts
+-- =============================================================================
+CREATE TABLE study_artifacts (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    study_step_id   UUID NOT NULL REFERENCES study_steps(id) ON DELETE CASCADE,
+    artifact_type   TEXT NOT NULL
+                    CHECK (artifact_type IN ('SUMMARY', 'FLASHCARDS', 'QUESTIONS', 'NARRATION')),
+    content         JSONB NOT NULL,
+    citations       JSONB NOT NULL DEFAULT '[]'::jsonb,
+    model_metadata  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT study_artifacts_step_type_unique UNIQUE (study_step_id, artifact_type)
+);
+
+COMMENT ON CONSTRAINT study_artifacts_step_type_unique ON study_artifacts IS
+    'Not explicit in design-doc.md §7.2, but added to make the "generate/cache '
+    'study material" contract (§11.2 POST /study-steps/{id}/artifacts, §10.1 '
+    '"preferably on demand and cached") enforceable as an upsert: at most one '
+    'cached artifact per (step, type). Remove if the product intends to keep '
+    'multiple historical generations per type instead of one cached copy.';
+
+CREATE INDEX idx_study_artifacts_study_step_id ON study_artifacts (study_step_id);

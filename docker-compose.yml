@@ -1,0 +1,27 @@
+services:
+  db:
+    build:
+      context: ./graphite-db
+    image: graphite-db:local
+    container_name: graphite-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-graphite}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-graphite}
+      POSTGRES_DB: ${POSTGRES_DB:-graphite}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:?set EMBEDDING_DIMENSIONS in .env before starting the database — see .env.example}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - graphite_pgdata:/var/lib/postgresql/data
+      # Bind-mounted (not baked into the image) so schema iteration during
+      # development doesn't require an image rebuild. Only runs against a fresh
+      # volume — see graphite-db/init/README notes in the validation report.
+      - ./graphite-db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-graphite} -d ${POSTGRES_DB:-graphite}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  graphite_pgdata:
