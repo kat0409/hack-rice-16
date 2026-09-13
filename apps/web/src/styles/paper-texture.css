@@ -1,7 +1,13 @@
 /*
-  Paper background: warm off-white base + soft irregular tonal patches +
-  a very low-opacity fibrous noise layer. Kept subtle so body text stays
-  highly readable — this should read as "sketchbook paper", not grunge.
+  Paper background, bottom to top:
+    1. warm off-white base color
+    2. faint engineering-notebook grid (minor lines + bolder major lines)
+       plus soft irregular tonal patches
+    3. dot markers at the major grid intersections (graph-paper feel)
+    4. a soft accent glow that follows the cursor — the "interactive" layer
+    5. a very low-opacity fibrous noise layer on top of everything
+
+  Kept subtle throughout so body text stays highly readable.
 */
 
 .paper-surface {
@@ -15,25 +21,89 @@
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background-image: radial-gradient(
-      ellipse 55% 40% at 12% 18%,
-      rgba(233, 227, 216, 0.65),
-      transparent 60%
+  background-image:
+    /* major grid lines, every 5th minor line */
+    repeating-linear-gradient(
+      to right,
+      rgba(93, 91, 85, 0.13) 0,
+      rgba(93, 91, 85, 0.13) 1px,
+      transparent 1px,
+      transparent 160px
     ),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(93, 91, 85, 0.13) 0,
+      rgba(93, 91, 85, 0.13) 1px,
+      transparent 1px,
+      transparent 160px
+    ),
+    /* minor grid lines */
+    repeating-linear-gradient(
+      to right,
+      rgba(93, 91, 85, 0.06) 0,
+      rgba(93, 91, 85, 0.06) 1px,
+      transparent 1px,
+      transparent 32px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(93, 91, 85, 0.06) 0,
+      rgba(93, 91, 85, 0.06) 1px,
+      transparent 1px,
+      transparent 32px
+    ),
+    /* soft tonal patches */
+    radial-gradient(ellipse 55% 40% at 12% 18%, rgba(233, 227, 216, 0.65), transparent 60%),
     radial-gradient(ellipse 50% 45% at 88% 8%, rgba(214, 208, 197, 0.5), transparent 55%),
     radial-gradient(ellipse 55% 50% at 78% 88%, rgba(233, 227, 216, 0.6), transparent 60%),
     radial-gradient(ellipse 45% 40% at 8% 92%, rgba(214, 208, 197, 0.45), transparent 55%),
     radial-gradient(ellipse 40% 35% at 50% 48%, rgba(233, 227, 216, 0.3), transparent 65%);
 }
 
-.paper-grain {
+.paper-dots {
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 1;
+  background-image: radial-gradient(circle, rgba(93, 91, 85, 0.28) 1.2px, transparent 1.6px);
+  background-size: 160px 160px;
+  background-position: -80px -80px;
+}
+
+/* Soft accent glow that tracks the cursor — updated via JS custom properties. */
+.paper-spotlight {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  background: radial-gradient(
+    320px circle at var(--spotlight-x, 50%) var(--spotlight-y, 30%),
+    rgba(64, 86, 161, 0.32),
+    rgba(64, 86, 161, 0.12) 45%,
+    transparent 75%
+  );
+}
+
+.paper-spotlight[data-active='true'] {
+  opacity: 1;
+}
+
+.paper-grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
   opacity: 0.09;
   mix-blend-mode: multiply;
   background-repeat: repeat;
   background-size: 180px 180px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-spotlight {
+    display: none;
+  }
 }
