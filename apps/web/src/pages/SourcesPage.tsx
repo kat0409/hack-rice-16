@@ -151,7 +151,7 @@ export function SourcesPage() {
     <div className="flex flex-col gap-8">
       <header className="rounded-2xl border-2 border-ink/10 bg-paper px-5 py-4 shadow-chunky">
         <Eyebrow>Sources</Eyebrow>
-        <Heading as="h1" size="page" className="mt-1">
+        <Heading as="h1" size="page" className="mt-1 font-retro font-normal">
           From your course
         </Heading>
       </header>

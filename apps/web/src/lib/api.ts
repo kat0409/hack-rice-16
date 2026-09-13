@@ -180,12 +180,27 @@ export const api = {
 
   narrationAudioUrl: (narrationId: string) => `${BASE}/narrations/${narrationId}/audio`,
 
-  transcribeAudio: (courseId: string, file: File) => {
+  transcribeAudio: (courseId: string, audio: Blob, filename = 'voice.webm') => {
     const form = new FormData()
-    form.append('audio', file)
+    form.append('audio', audio instanceof File ? audio : new File([audio], filename, { type: audio.type }))
     return request<{ text: string; language_code: string | null }>(
       `/courses/${courseId}/audio-transcriptions`,
       { method: 'POST', body: form },
     )
   },
+
+  tutorTurn: (courseId: string, question: string, history: TutorHistoryTurn[]) =>
+    request<TutorTurnDto>(`/courses/${courseId}/tutor/turns`, json('POST', { question, history })),
+
+  tutorAudioUrl: (audioId: string) => `${BASE}/tutor-audio/${audioId}`,
+}
+
+export type TutorHistoryTurn = { role: 'user' | 'tutor'; text: string }
+
+export type TutorTurnDto = {
+  answer_text: string
+  citations: EvidenceDto[]
+  concepts: { id: string; name: string }[]
+  audio_id: string | null
+  audio_error: string | null
 }

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Mic, Pause, Play, Upload } from 'lucide-react'
+import { Mic, Pause, Play } from 'lucide-react'
 import { StepPicker } from '@/components/study/StepPicker'
-import { Badge } from '@/components/ui/Badge'
+import { TutorPanel } from '@/components/tutor/TutorPanel'
 import { Eyebrow } from '@/components/ui/Eyebrow'
 import { Heading } from '@/components/ui/Heading'
 import { useArtifact } from '@/hooks/useArtifact'
@@ -12,8 +12,6 @@ import { api, type ApiError, type SummaryContent } from '@/lib/api'
 import { cn } from '@/lib/cn'
 
 const BAR_HEIGHTS = [30, 55, 40, 70, 45, 85, 35, 60, 50, 75, 40, 65, 30, 55, 45, 80, 35, 60, 50, 40]
-
-type TranscribeState = 'idle' | 'transcribing' | 'done' | 'error'
 
 function format(seconds: number) {
   const m = Math.floor(seconds / 60)
@@ -37,11 +35,6 @@ export function AudioPage() {
   const [elapsed, setElapsed] = useState(0)
   const [duration, setDuration] = useState(0)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-
-  const [transcribeState, setTranscribeState] = useState<TranscribeState>('idle')
-  const [fileName, setFileName] = useState<string | null>(null)
-  const [transcript, setTranscript] = useState('')
-  const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     setAudioUrl(null)
@@ -82,38 +75,25 @@ export function AudioPage() {
     }
   }
 
-  const handleFile = async (files: FileList | null) => {
-    const file = files?.[0]
-    if (!file || !courseId) return
-    setFileName(file.name)
-    setTranscribeState('transcribing')
-    try {
-      const result = await api.transcribeAudio(courseId, file)
-      setTranscript(result.text)
-      setTranscribeState('done')
-    } catch (err) {
-      setTranscript((err as Error).message)
-      setTranscribeState('error')
-    }
-  }
-
   const progress = duration > 0 ? elapsed / duration : 0
 
   return (
     <div className="flex flex-col gap-8">
       <header className="rounded-2xl border-2 border-ink/10 bg-paper px-5 py-4 shadow-chunky">
         <Eyebrow>{course?.name ?? 'Subject'}</Eyebrow>
-        <Heading as="h1" size="page" className="mt-1">
-          Audio
+        <Heading as="h1" size="page" className="mt-1 font-retro font-normal">
+          Voice Tutor
         </Heading>
       </header>
+
+      {courseId && <TutorPanel courseId={courseId} />}
 
       <StepPicker courseId={courseId} steps={steps} step={step} loading={stepLoading} onSelect={select} />
 
       {step && (
         <div className="rounded-2xl border-2 border-ink/10 bg-paper p-6 shadow-chunky">
           <Eyebrow size="card">Narrated recap</Eyebrow>
-          <Heading as="h2" size="section" className="mt-1">
+          <Heading as="h2" size="section" className="mt-1 font-lilita text-base font-normal">
             {summary?.content.title ?? step.conceptName}
           </Heading>
           {summaryLoading && <p className="mt-2 text-sm text-ink-soft">Writing the summary to narrate…</p>}
@@ -192,62 +172,6 @@ export function AudioPage() {
           )}
         </div>
       )}
-
-      <div className="rounded-2xl border-2 border-ink/10 bg-paper p-6 shadow-chunky">
-        <Eyebrow size="card">Upload a recording</Eyebrow>
-        <Heading as="h2" size="section" className="mt-1">
-          Transcribe your own audio
-        </Heading>
-        <p className="mt-1 text-sm text-ink-soft">
-          A lecture recording or voice memo gets sent to ElevenLabs for speech-to-text. The transcript comes back
-          here for you to review.
-        </p>
-
-        <div
-          onClick={() => inputRef.current?.click()}
-          role="button"
-          tabIndex={0}
-          className="mt-4 flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-ink/20 bg-paper-dark px-6 py-7 text-center transition-colors hover:border-ink/35"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-paper text-accent shadow-chunky-sm">
-            {transcribeState === 'transcribing' ? (
-              <Mic className="h-4.5 w-4.5 animate-pulse" strokeWidth={1.75} />
-            ) : (
-              <Upload className="h-4.5 w-4.5" strokeWidth={1.75} />
-            )}
-          </span>
-          <Heading as="p" size="concept">
-            Click to choose an audio file
-          </Heading>
-          <p className="text-xs text-ink-soft">MP3, WAV, or M4A</p>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="audio/*"
-            className="hidden"
-            onChange={(event) => {
-              handleFile(event.target.files)
-              event.target.value = ''
-            }}
-          />
-        </div>
-
-        {transcribeState !== 'idle' && (
-          <div className="mt-4 flex flex-col gap-2 rounded-xl border-2 border-ink/10 bg-paper-dark p-4">
-            <div className="flex items-center justify-between">
-              <p className="truncate text-sm font-medium text-ink">{fileName}</p>
-              <Badge variant={transcribeState === 'done' ? 'accent' : 'outline'}>
-                {transcribeState === 'transcribing' && 'Transcribing…'}
-                {transcribeState === 'done' && 'Transcribed'}
-                {transcribeState === 'error' && 'Failed'}
-              </Badge>
-            </div>
-            {(transcribeState === 'done' || transcribeState === 'error') && (
-              <p className="font-serif text-sm italic leading-relaxed text-ink-soft">{transcript}</p>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   )
 }

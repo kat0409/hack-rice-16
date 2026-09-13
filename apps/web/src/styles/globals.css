@@ -1,5 +1,21 @@
 @import './paper-texture.css';
 
+@font-face {
+  font-family: 'Super Mario 256';
+  src: url('/fonts/SuperMario256.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Jungle Adventurer';
+  src: url('/fonts/JungleAdventurer.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

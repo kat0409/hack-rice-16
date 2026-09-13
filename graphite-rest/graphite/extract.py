@@ -37,7 +37,11 @@ logger = logging.getLogger("graphite")
 PROMPT_VERSION = "extract-v1"
 BATCH_MAX_CHARS = 8000
 RELATION_WINDOW_MAX_CHARS = 30000
-ROSTER_CAP = 150
+# Entities offered to the relationship pass. Anything past this is truncated and
+# can never receive an edge, so the cap has to clear the entity count of a dense
+# single document — a broad survey of one domain runs well past 150. The roster
+# is one "ref | name | type" line per entity, so raising it costs little prompt.
+ROSTER_CAP = 500
 REVIEW_THRESHOLD = 0.5
 
 EXTRACT_RELATIONS = (
@@ -448,6 +452,12 @@ def build_roster(
     )
     for entity_id, name, etype, _ in others:
         rows.append((_key(etype, name), name, etype))
+    if len(rows) > ROSTER_CAP:
+        logger.warning(
+            "Roster truncated: %d entities exceed ROSTER_CAP=%d; the remainder "
+            "cannot receive relationships",
+            len(rows), ROSTER_CAP,
+        )
     rows = rows[:ROSTER_CAP]
     roster = []
     ref_to_key = {}

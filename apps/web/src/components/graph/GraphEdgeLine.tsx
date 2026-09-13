@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import type { GraphEdge } from '@/types/graph'
 import type { GraphPoint } from '@/lib/graphLayout'
 import { RELATION_STYLE } from '@/lib/graphTheme'
@@ -12,9 +12,19 @@ type GraphEdgeLineProps = {
   toRadius: number
   active: boolean
   dimmed: boolean
+  lowDetail: boolean
 }
 
-export function GraphEdgeLine({ edge, from, to, fromRadius, toRadius, active, dimmed }: GraphEdgeLineProps) {
+export const GraphEdgeLine = memo(function GraphEdgeLine({
+  edge,
+  from,
+  to,
+  fromRadius,
+  toRadius,
+  active,
+  dimmed,
+  lowDetail,
+}: GraphEdgeLineProps) {
   const style = RELATION_STYLE[edge.relationType]
 
   const { path, midX, midY, angle } = useMemo(() => {
@@ -48,7 +58,7 @@ export function GraphEdgeLine({ edge, from, to, fromRadius, toRadius, active, di
         strokeDasharray={style.dash}
         strokeLinecap="round"
         markerEnd={style.arrow ? `url(#${markerId})` : undefined}
-        filter="url(#pencil-wobble)"
+        filter={lowDetail ? undefined : 'url(#pencil-wobble)'}
       />
       {active && (
         <g transform={`translate(${midX}, ${midY}) rotate(${angle > 90 || angle < -90 ? angle + 180 : angle})`}>
@@ -76,4 +86,4 @@ export function GraphEdgeLine({ edge, from, to, fromRadius, toRadius, active, di
       )}
     </g>
   )
-}
+})

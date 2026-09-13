@@ -189,3 +189,26 @@ class StudySessionOut(BaseModel):
     explanation: str
     steps: list[StudyStepOut]
     omitted_entities: list[OmittedEntityOut] = []
+
+
+class TutorTurnIn(BaseModel):
+    role: Literal["user", "tutor"]
+    text: str = Field(min_length=1, max_length=4000)
+
+
+class TutorTurnCreate(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    history: list[TutorTurnIn] = Field(default_factory=list, max_length=12)
+
+
+class TutorConceptOut(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class TutorTurnOut(BaseModel):
+    answer_text: str
+    citations: list[GraphEvidenceOut]
+    concepts: list[TutorConceptOut]
+    audio_id: str | None = None
+    audio_error: str | None = None

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { GraphCanvas } from '@/components/graph/GraphCanvas'
 import { Eyebrow } from '@/components/ui/Eyebrow'
 import { Heading } from '@/components/ui/Heading'
@@ -11,12 +11,18 @@ import type { GraphEdge, GraphNode } from '@/types/graph'
 
 const POLL_MS = 3000
 
+function graphSignature(graph: { nodes: GraphNode[]; edges: GraphEdge[] }) {
+  return JSON.stringify([graph.nodes, graph.edges])
+}
+
 export function MapPage() {
   const { courseId = '' } = useParams()
   const { course } = useCourse(courseId)
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [searchParams] = useSearchParams()
+  const signature = useRef<string | null>(null)
 
   useEffect(() => {
     if (!courseId) return
@@ -27,7 +33,14 @@ export function MapPage() {
       try {
         const [dto, docs] = await Promise.all([api.getGraph(courseId), api.listDocuments(courseId)])
         if (cancelled) return
-        setGraph(mapGraph(dto as GraphDto))
+        // Polling returns the same graph over and over; only hand the canvas new
+        // arrays when something actually changed, so its view isn't disturbed.
+        const next = mapGraph(dto as GraphDto)
+        const nextSignature = graphSignature(next)
+        if (nextSignature !== signature.current) {
+          signature.current = nextSignature
+          setGraph(next)
+        }
         const active = docs.items.some((d) => d.status !== 'READY' && d.status !== 'FAILED')
         setProcessing(active)
         if (active) timer = window.setTimeout(load, POLL_MS)
@@ -49,7 +62,7 @@ export function MapPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <Eyebrow>{course?.name ?? 'Subject'}</Eyebrow>
-            <Heading as="h1" size="page" className="mt-0.5">
+            <Heading as="h1" size="page" className="mt-0.5 font-retro font-normal">
               Knowledge Map
             </Heading>
           </div>
@@ -69,7 +82,7 @@ export function MapPage() {
       {error && <p className="text-sm text-red-700">{error}</p>}
 
       {graph && graph.nodes.length > 0 ? (
-        <GraphCanvas nodes={graph.nodes} edges={graph.edges} />
+        <GraphCanvas nodes={graph.nodes} edges={graph.edges} focusId={searchParams.get('focus')} />
       ) : (
         <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-ink/20 bg-paper-dark px-6 py-12 text-center">
           <Heading as="p" size="concept">

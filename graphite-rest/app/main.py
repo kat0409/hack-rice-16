@@ -19,6 +19,7 @@ from app.routers import (
     jobs,
     narration,
     study_sessions,
+    tutor,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     api_v1.include_router(study_sessions.router)
     api_v1.include_router(artifacts.router)
     api_v1.include_router(narration.router)
+    api_v1.include_router(tutor.router)
     app.include_router(api_v1)
 
     return app

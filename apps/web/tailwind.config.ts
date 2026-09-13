@@ -21,9 +21,13 @@ const config: Config = {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['"Architects Daughter"', '"DM Sans"', 'Inter', 'system-ui', 'sans-serif'],
         serif: ['Lora', 'serif'],
-        // Retro 8-bit game-title look (the "Mario font" ask) — used sparingly,
-        // only for the "graphite" logo and the course-goal title, not app-wide.
-        retro: ['"Press Start 2P"', 'monospace'],
+        // Retro game-title look (the "Mario font" ask) — used for the "graphite"
+        // wordmark and each page's large top-of-page title, not smaller card titles.
+        retro: ['"Super Mario 256"', 'monospace'],
+        // Card/section titles smaller than the page-level title — kept as its
+        // own class, separate from `retro`, so the two can be swapped independently.
+        jungle: ['"Jungle Adventurer"', '"Architects Daughter"', 'cursive'],
+        lilita: ['"Lilita One"', 'cursive'],
       },
       boxShadow: {
         soft: '0 8px 24px -12px rgba(29, 29, 27, 0.18)',

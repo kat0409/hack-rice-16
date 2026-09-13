@@ -14,7 +14,7 @@ const navItems = [
 const toolItems = [
   { label: 'Flashcards', to: (id: string) => `/course/${id}/flashcards`, icon: Layers },
   { label: 'Practice', to: (id: string) => `/course/${id}/practice`, icon: Target },
-  { label: 'Audio', to: (id: string) => `/course/${id}/audio`, icon: Mic },
+  { label: 'Voice Tutor', to: (id: string) => `/course/${id}/audio`, icon: Mic },
 ]
 
 export function LeftSidebar() {

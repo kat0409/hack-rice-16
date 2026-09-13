@@ -1,0 +1,90 @@
+flowchart LR
+    %% graphite — hackathon architecture
+    %% This file is intentionally presentation-oriented. Paste it into Mermaid Live
+    %% or a Mermaid-compatible editor, then restyle/export for the final deck.
+
+    Student(["Student<br/>notes + goal + time"])
+
+    subgraph Experience["1 · Student experience — React + TypeScript"]
+        Workspace["Course workspace<br/>create a subject"]
+        Sources["Sources<br/>PDF · DOCX · TXT · MD"]
+        Map["Knowledge map<br/>concepts · dependencies · evidence"]
+        Route["Learning route<br/>ordered + time-boxed + explainable"]
+        Study["Study modes<br/>summary · flashcards · quiz · audio"]
+    end
+
+    subgraph App["2 · Application layer — FastAPI"]
+        API["REST API<br/>courses · documents · graph · sessions · artifacts"]
+        Queue["Durable jobs<br/>status · retries · recovery"]
+        Planner["Deterministic route planner<br/>retrieve → traverse → rank → fit time"]
+        ArtifactEngine["Grounded artifact engine<br/>generate only from cited evidence"]
+    end
+
+    subgraph Pipeline["3 · Knowledge pipeline — Python worker"]
+        Parse["Parse / OCR<br/>preserve page + section context"]
+        Chunk["Chunk<br/>bounded, overlapping evidence units"]
+        Embed["Embed locally<br/>BAAI bge-small · 384 dimensions"]
+        Extract["Extract with Gemini<br/>entities · procedures · typed edges"]
+        Resolve["Resolve + validate<br/>dedupe · confidence · provenance"]
+    end
+
+    subgraph Data["4 · One local PostgreSQL system"]
+        SQL[("Relational tables<br/>identity · files · evidence · jobs · progress")]
+        Vector[("pgvector<br/>semantic relevance")]
+        AGE[("Apache AGE<br/>knowledge topology")]
+    end
+
+    subgraph Providers["5 · Bounded external intelligence"]
+        Gemini["Google Gemini<br/>structured extraction + grounded generation"]
+        Eleven["ElevenLabs<br/>speech-to-text + narration"]
+    end
+
+    Student --> Workspace --> Sources
+    Sources -->|"upload"| API
+    API -->|"create job"| Queue
+    Queue --> Parse --> Chunk --> Embed --> Extract --> Resolve
+
+    Parse -. "scanned pages only" .-> Gemini
+    Extract <--> Gemini
+    ArtifactEngine <--> Gemini
+    Student -. "optional audio transcription" .-> Eleven
+    Eleven -. "editable transcript" .-> API
+    Study -. "optional narrated recap" .-> Eleven
+
+    API <--> SQL
+    Queue <--> SQL
+    Chunk --> SQL
+    Embed --> Vector
+    Resolve -->|"metadata + citations"| SQL
+    Resolve -->|"vertices + typed edges"| AGE
+    SQL <-. "shared stable UUIDs" .-> AGE
+    SQL --- Vector
+
+    API --> Map
+    Map -->|"set destination"| Route
+    Route -->|"goal vector"| Vector
+    Vector -->|"relevant starting points"| Planner
+    Planner -->|"expand prerequisites"| AGE
+    AGE -->|"bounded subgraph"| Planner
+    SQL -->|"hydrate evidence + confidence"| Planner
+    Planner -->|"save versioned study session"| SQL
+    Planner --> Route --> Study
+    Study --> ArtifactEngine
+    SQL -->|"cited source excerpts"| ArtifactEngine
+    Study -->|"progress"| API
+    Map -->|"inspect source evidence"| Student
+    Study -->|"learn with confidence"| Student
+
+    classDef human fill:#FFF3C4,stroke:#3B2F2F,stroke-width:2px,color:#1F1B16;
+    classDef ui fill:#DDF4FF,stroke:#176B87,stroke-width:1.5px,color:#12333F;
+    classDef app fill:#E9E0FF,stroke:#6546A1,stroke-width:1.5px,color:#2A1B4D;
+    classDef pipe fill:#DFF5E3,stroke:#357A45,stroke-width:1.5px,color:#173D22;
+    classDef data fill:#FFE1D6,stroke:#A64B2A,stroke-width:1.5px,color:#4A2115;
+    classDef external fill:#F0F0F0,stroke:#666,stroke-dasharray:5 3,color:#222;
+
+    class Student human;
+    class Workspace,Sources,Map,Route,Study ui;
+    class API,Queue,Planner,ArtifactEngine app;
+    class Parse,Chunk,Embed,Extract,Resolve pipe;
+    class SQL,Vector,AGE data;
+    class Gemini,Eleven external;

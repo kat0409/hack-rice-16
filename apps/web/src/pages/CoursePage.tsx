@@ -137,7 +137,7 @@ export function CoursePage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <Eyebrow>{course?.name ?? 'Subject'}</Eyebrow>
-            <Heading as="h1" size="page" className="mt-0.5">
+            <Heading as="h1" size="page" className="mt-0.5 font-retro font-normal">
               {hasRoute ? 'Your study route' : 'Learning Path'}
             </Heading>
           </div>
