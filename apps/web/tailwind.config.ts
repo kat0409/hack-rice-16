@@ -19,12 +19,20 @@ const config: Config = {
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['"DM Sans"', 'Inter', 'system-ui', 'sans-serif'],
+        display: ['"Architects Daughter"', '"DM Sans"', 'Inter', 'system-ui', 'sans-serif'],
         serif: ['Lora', 'serif'],
+        // Retro 8-bit game-title look (the "Mario font" ask) — used sparingly,
+        // only for the "graphite" logo and the course-goal title, not app-wide.
+        retro: ['"Press Start 2P"', 'monospace'],
       },
       boxShadow: {
         soft: '0 8px 24px -12px rgba(29, 29, 27, 0.18)',
         node: '0 4px 14px -4px rgba(64, 86, 161, 0.35)',
+        // "Wii channel" chunky panels: a hard offset edge (like a pressed button
+        // lip) plus a soft ambient shadow underneath, instead of a modern blur-only shadow.
+        chunky: '0 4px 0 rgba(29, 29, 27, 0.16), 0 12px 26px -10px rgba(29, 29, 27, 0.3)',
+        'chunky-sm': '0 2px 0 rgba(29, 29, 27, 0.14), 0 6px 14px -6px rgba(29, 29, 27, 0.24)',
+        'chunky-accent': '0 4px 0 rgba(46, 63, 124, 0.55), 0 12px 26px -10px rgba(64, 86, 161, 0.45)',
       },
       letterSpacing: {
         widest2: '0.14em',

@@ -14,7 +14,7 @@ export function MobileBottomNav() {
   const { courseId = DEMO_COURSE_ID } = useParams()
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 flex items-stretch justify-around border-t border-border bg-paper/95 backdrop-blur md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-20 flex items-stretch justify-around border-t-2 border-ink/10 bg-paper md:hidden">
       {items.map((item) => (
         <NavLink
           key={item.label}

@@ -8,3 +8,10 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Local secrets — design-doc.md §16.1: "Commit `.env.example`, never `.env`."
+# This rule was previously unenforced by .gitignore; adding it here.
+.env
+
+# Local uploaded course documents (UPLOAD_DIR default, design-doc.md §16.1)
+/data/uploads/

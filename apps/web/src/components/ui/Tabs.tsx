@@ -14,7 +14,7 @@ type TabsProps = {
 
 export function Tabs({ items }: TabsProps) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-full border border-border bg-paper/70 p-1">
+    <div className="inline-flex items-center gap-1 rounded-full border-2 border-ink/10 bg-paper p-1">
       {items.map((item) => (
         <NavLink
           key={item.key}
@@ -23,7 +23,7 @@ export function Tabs({ items }: TabsProps) {
           className={({ isActive }) =>
             cn(
               'rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
-              isActive ? 'bg-ink text-paper shadow-soft' : 'text-ink-soft hover:text-ink',
+              isActive ? 'bg-ink text-paper shadow-chunky-sm' : 'text-ink-soft hover:text-ink',
             )
           }
         >

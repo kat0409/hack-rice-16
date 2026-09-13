@@ -10,8 +10,10 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
-  primary: 'bg-accent text-paper hover:bg-accent-dark shadow-node',
-  secondary: 'bg-paper border border-border text-ink hover:border-ink-soft',
+  primary:
+    'bg-accent text-paper hover:bg-accent-dark shadow-chunky-accent active:translate-y-[3px] active:shadow-none',
+  secondary:
+    'bg-paper border-2 border-ink/15 text-ink shadow-chunky-sm hover:border-ink/25 active:translate-y-[2px] active:shadow-none',
   ghost: 'text-ink-soft hover:text-ink hover:bg-paper-dark/60',
 }
 
@@ -28,7 +30,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       ref={ref}
       className={cn(
-        'inline-flex items-center justify-center gap-2 font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex items-center justify-center gap-2 font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-150 disabled:pointer-events-none disabled:opacity-50',
         variantStyles[variant],
         sizeStyles[size],
         className,

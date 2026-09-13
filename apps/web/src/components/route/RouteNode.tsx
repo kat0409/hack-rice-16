@@ -1,6 +1,8 @@
 import { Check } from 'lucide-react'
 import type { StudyStep } from '@/types/study'
 import { activityIcon, activityLabel } from '@/lib/activity'
+import { Eyebrow } from '@/components/ui/Eyebrow'
+import { Heading } from '@/components/ui/Heading'
 
 type RouteNodeProps = {
   step: StudyStep
@@ -12,7 +14,7 @@ export function RouteNode({ step }: RouteNodeProps) {
   if (step.status === 'COMPLETE') {
     return (
       <div className="flex flex-col items-center gap-2 text-center">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-soft/80 text-paper shadow-soft">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-soft/80 text-paper shadow-chunky-sm">
           <Check className="h-4 w-4" strokeWidth={2.5} />
         </span>
         <span className="max-w-[140px] text-xs font-medium text-ink-soft">{step.conceptName}</span>
@@ -28,12 +30,16 @@ export function RouteNode({ step }: RouteNodeProps) {
           <span className="h-3.5 w-3.5 rounded-full bg-paper" aria-hidden="true" />
         </span>
         <span className="h-4 w-0.5 bg-accent/40" aria-hidden="true" />
-        <div className="w-full rounded-2xl border border-accent/25 bg-paper/95 px-6 py-5 text-left shadow-node">
+        <div className="w-full rounded-2xl border-2 border-accent/25 bg-paper px-6 py-5 text-left shadow-chunky-accent">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-semibold uppercase tracking-widest2 text-accent">You&apos;re here</p>
+            <Eyebrow size="card" className="text-accent">
+              You&apos;re here
+            </Eyebrow>
             <ActivityIcon className="h-3.5 w-3.5 text-accent/70" strokeWidth={1.75} />
           </div>
-          <h3 className="mt-1.5 font-display text-lg font-semibold text-ink">{step.conceptName}</h3>
+          <Heading as="h3" size="concept" className="mt-1.5">
+            {step.conceptName}
+          </Heading>
           <p className="mt-1 text-xs text-ink-soft">
             Current step · {step.allocatedMinutes} min · {activityLabel(step.activityType)}
           </p>
@@ -60,10 +66,10 @@ export function RouteNode({ step }: RouteNodeProps) {
 
   return (
     <div className="flex flex-col items-center gap-2 text-center">
-      <span className="h-7 w-7 rounded-full border-2 border-border" aria-hidden="true" />
+      <span className="h-7 w-7 rounded-full border-2 border-ink/15" aria-hidden="true" />
       <div className="max-w-[150px]">
-        <span className="block text-xs font-medium text-ink-soft/80">{step.conceptName}</span>
-        <span className="block text-[10px] text-ink-soft/50">{step.allocatedMinutes} min</span>
+        <span className="block text-xs font-medium text-ink-soft">{step.conceptName}</span>
+        <span className="block text-[10px] text-ink-soft/60">{step.allocatedMinutes} min</span>
       </div>
     </div>
   )

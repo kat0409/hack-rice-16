@@ -5,6 +5,9 @@ import { CoursePage } from '@/pages/CoursePage'
 import { MapPage } from '@/pages/MapPage'
 import { SourcesPage } from '@/pages/SourcesPage'
 import { MaterialsPage } from '@/pages/MaterialsPage'
+import { FlashcardsPage } from '@/pages/FlashcardsPage'
+import { PracticePage } from '@/pages/PracticePage'
+import { AudioPage } from '@/pages/AudioPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 
 export const router = createBrowserRouter([
@@ -24,6 +27,9 @@ export const router = createBrowserRouter([
           { path: 'map', element: <MapPage /> },
           { path: 'sources', element: <SourcesPage /> },
           { path: 'materials', element: <MaterialsPage /> },
+          { path: 'flashcards', element: <FlashcardsPage /> },
+          { path: 'practice', element: <PracticePage /> },
+          { path: 'audio', element: <AudioPage /> },
         ],
       },
       { path: '/settings', element: <SettingsPage /> },

@@ -1,11 +1,26 @@
 /*
-  Paper background, bottom to top:
-    1. warm off-white base color
-    2. faint engineering-notebook grid (minor lines + bolder major lines)
-       plus soft irregular tonal patches
+  Paper background, bottom to top — ALL of it lives in .paper-surface's own
+  `background-*` properties, as one multi-layer background, deliberately NOT
+  as separate `position: fixed` sibling divs (that was the original design).
+
+  Why: a `position: fixed` element is checked for paint order against the
+  *entire document*, not just its DOM siblings, and in practice (confirmed by
+  screenshot testing in this app) such layers can still paint over supposedly
+  later, opaque, higher-in-normal-flow content even at `z-index: 0` — a
+  positive z-index makes it obviously wrong, but even z-index 0 was observed
+  bleeding a faint grid/glow through solid cards and the sidebar. A single
+  element's own `background-image` layers have no such ambiguity: the spec
+  guarantees they always paint behind that element's own children, full stop.
+  `background-attachment: fixed` (set once below, applies to every layer)
+  reproduces the "pattern stays put while content scrolls over it" look the
+  old fixed divs had.
+
+  Layers, topmost first (matches `background-image` order below):
+    1. a very low-opacity fibrous noise layer (multiply-blended)
+    2. a soft accent glow that follows the cursor (see useCursorSpotlight)
     3. dot markers at the major grid intersections (graph-paper feel)
-    4. a soft accent glow that follows the cursor — the "interactive" layer
-    5. a very low-opacity fibrous noise layer on top of everything
+    4. faint engineering-notebook grid (minor lines + bolder major lines)
+    5. soft irregular tonal patches
 
   Kept subtle throughout so body text stays highly readable.
 */
@@ -13,97 +28,133 @@
 .paper-surface {
   position: relative;
   background-color: #f5f1e8;
-}
-
-.paper-surface::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
+  background-attachment: fixed;
+  background-blend-mode: multiply, normal, normal, normal, normal, normal, normal, normal, normal, normal, normal;
+  background-size:
+    180px 180px, /* grain */
+    auto, /* cursor spotlight */
+    120px 120px, /* dots */
+    auto,
+    auto,
+    auto,
+    auto, /* grid lines (major x2, minor x2) */
+    auto,
+    auto,
+    auto,
+    auto,
+    auto; /* tonal patches */
+  background-position:
+    0 0, /* grain */
+    0 0, /* cursor spotlight */
+    -60px -60px, /* dots */
+    0 0,
+    0 0,
+    0 0,
+    0 0, /* grid lines */
+    0 0,
+    0 0,
+    0 0,
+    0 0,
+    0 0; /* tonal patches */
   background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.09'/%3E%3C/svg%3E"),
+    /* cursor spotlight — alpha driven by useCursorSpotlight via --spotlight-alpha-1/2,
+       which it ramps between 0 and their target values, rather than a CSS
+       opacity transition on a separate element. */
+    radial-gradient(
+      320px circle at var(--spotlight-x, 50%) var(--spotlight-y, 30%),
+      rgba(64, 86, 161, var(--spotlight-alpha-1, 0)),
+      rgba(64, 86, 161, var(--spotlight-alpha-2, 0)) 45%,
+      transparent 75%
+    ),
+    radial-gradient(circle, rgba(93, 91, 85, 0.38) 1.4px, transparent 1.8px),
     /* major grid lines, every 5th minor line */
     repeating-linear-gradient(
       to right,
-      rgba(93, 91, 85, 0.13) 0,
-      rgba(93, 91, 85, 0.13) 1px,
+      rgba(93, 91, 85, 0.22) 0,
+      rgba(93, 91, 85, 0.22) 1px,
       transparent 1px,
-      transparent 160px
+      transparent 120px
     ),
     repeating-linear-gradient(
       to bottom,
-      rgba(93, 91, 85, 0.13) 0,
-      rgba(93, 91, 85, 0.13) 1px,
+      rgba(93, 91, 85, 0.22) 0,
+      rgba(93, 91, 85, 0.22) 1px,
       transparent 1px,
-      transparent 160px
+      transparent 120px
     ),
     /* minor grid lines */
     repeating-linear-gradient(
       to right,
-      rgba(93, 91, 85, 0.06) 0,
-      rgba(93, 91, 85, 0.06) 1px,
+      rgba(93, 91, 85, 0.1) 0,
+      rgba(93, 91, 85, 0.1) 1px,
       transparent 1px,
-      transparent 32px
+      transparent 24px
     ),
     repeating-linear-gradient(
       to bottom,
-      rgba(93, 91, 85, 0.06) 0,
-      rgba(93, 91, 85, 0.06) 1px,
+      rgba(93, 91, 85, 0.1) 0,
+      rgba(93, 91, 85, 0.1) 1px,
       transparent 1px,
-      transparent 32px
+      transparent 24px
     ),
-    /* soft tonal patches */
-    radial-gradient(ellipse 55% 40% at 12% 18%, rgba(233, 227, 216, 0.65), transparent 60%),
-    radial-gradient(ellipse 50% 45% at 88% 8%, rgba(214, 208, 197, 0.5), transparent 55%),
-    radial-gradient(ellipse 55% 50% at 78% 88%, rgba(233, 227, 216, 0.6), transparent 60%),
-    radial-gradient(ellipse 45% 40% at 8% 92%, rgba(214, 208, 197, 0.45), transparent 55%),
-    radial-gradient(ellipse 40% 35% at 50% 48%, rgba(233, 227, 216, 0.3), transparent 65%);
+    /* soft tonal patches — kept faint so the grid itself reads first */
+    radial-gradient(ellipse 55% 40% at 12% 18%, rgba(233, 227, 216, 0.4), transparent 60%),
+    radial-gradient(ellipse 50% 45% at 88% 8%, rgba(214, 208, 197, 0.3), transparent 55%),
+    radial-gradient(ellipse 55% 50% at 78% 88%, rgba(233, 227, 216, 0.35), transparent 60%),
+    radial-gradient(ellipse 45% 40% at 8% 92%, rgba(214, 208, 197, 0.28), transparent 55%),
+    radial-gradient(ellipse 40% 35% at 50% 48%, rgba(233, 227, 216, 0.18), transparent 65%);
 }
 
-.paper-dots {
-  position: fixed;
+/*
+  Graph-paper panel used behind the knowledge graph canvas: a tighter warm
+  off-white engineering grid (quarter-inch feel) plus the same fibrous grain
+  as the rest of the app, so it reads as "a page of graph paper" rather than
+  a generic app panel. Uses the same warm ink-grey grid tone as the rest of
+  the app's paper texture (not a cooler blue-grey) so this panel doesn't read
+  as a colder, greyer patch against the warm off-white page around it.
+*/
+.graph-paper {
+  background-color: #f8f5ec;
+  background-image:
+    /* major grid, every 4th minor line */
+    repeating-linear-gradient(
+      to right,
+      rgba(93, 91, 85, 0.24) 0,
+      rgba(93, 91, 85, 0.24) 1px,
+      transparent 1px,
+      transparent 88px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(93, 91, 85, 0.24) 0,
+      rgba(93, 91, 85, 0.24) 1px,
+      transparent 1px,
+      transparent 88px
+    ),
+    /* minor grid */
+    repeating-linear-gradient(
+      to right,
+      rgba(93, 91, 85, 0.1) 0,
+      rgba(93, 91, 85, 0.1) 1px,
+      transparent 1px,
+      transparent 22px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(93, 91, 85, 0.1) 0,
+      rgba(93, 91, 85, 0.1) 1px,
+      transparent 1px,
+      transparent 22px
+    ),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px, 0 0;
+}
+
+.graph-paper::before {
+  content: '';
+  position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 1;
-  background-image: radial-gradient(circle, rgba(93, 91, 85, 0.28) 1.2px, transparent 1.6px);
-  background-size: 160px 160px;
-  background-position: -80px -80px;
-}
-
-/* Soft accent glow that tracks the cursor — updated via JS custom properties. */
-.paper-spotlight {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 2;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  background: radial-gradient(
-    320px circle at var(--spotlight-x, 50%) var(--spotlight-y, 30%),
-    rgba(64, 86, 161, 0.32),
-    rgba(64, 86, 161, 0.12) 45%,
-    transparent 75%
-  );
-}
-
-.paper-spotlight[data-active='true'] {
-  opacity: 1;
-}
-
-.paper-grain {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 3;
-  opacity: 0.09;
-  mix-blend-mode: multiply;
-  background-repeat: repeat;
-  background-size: 180px 180px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .paper-spotlight {
-    display: none;
-  }
+  box-shadow: inset 0 0 0 1px rgba(29, 29, 27, 0.06), inset 0 0 42px rgba(93, 91, 85, 0.1);
 }

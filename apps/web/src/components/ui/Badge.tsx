@@ -10,7 +10,7 @@ type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
 const variantStyles: Record<BadgeVariant, string> = {
   neutral: 'bg-paper-dark text-ink-soft',
   accent: 'bg-accent-soft text-accent-dark',
-  outline: 'border border-border text-ink-soft',
+  outline: 'border-2 border-ink/15 text-ink-soft',
 }
 
 export function Badge({ className, variant = 'neutral', ...props }: BadgeProps) {

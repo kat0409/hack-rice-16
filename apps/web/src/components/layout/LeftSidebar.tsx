@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
-import { BookOpen, Compass, FileText, Map, Settings as SettingsIcon } from 'lucide-react'
+import { BookOpen, Compass, FileText, Layers, Map, Mic, Settings as SettingsIcon, Target } from 'lucide-react'
 import { DEMO_COURSE_ID, mockCourse } from '@/data/mockCourse'
 import { cn } from '@/lib/cn'
+import { Eyebrow } from '@/components/ui/Eyebrow'
 
 const navItems = [
   { label: 'Learning Path', to: (id: string) => `/course/${id}/path`, icon: Compass },
@@ -11,20 +11,24 @@ const navItems = [
   { label: 'Study Materials', to: (id: string) => `/course/${id}/materials`, icon: BookOpen },
 ]
 
-const toolItems = ['Flashcards', 'Practice', 'Audio']
+const toolItems = [
+  { label: 'Flashcards', to: (id: string) => `/course/${id}/flashcards`, icon: Layers },
+  { label: 'Practice', to: (id: string) => `/course/${id}/practice`, icon: Target },
+  { label: 'Audio', to: (id: string) => `/course/${id}/audio`, icon: Mic },
+]
 
 export function LeftSidebar() {
   const { courseId = DEMO_COURSE_ID } = useParams()
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-[240px] shrink-0 flex-col justify-between overflow-y-auto border-r border-border/70 bg-paper-dark/30 px-5 py-6 md:flex">
+    <aside className="sticky top-0 hidden h-screen w-[240px] shrink-0 flex-col justify-between overflow-y-auto border-r-2 border-ink/10 bg-paper px-5 py-6 md:flex">
       <div className="flex flex-col gap-8">
         <div className="px-1">
-          <span className="font-display text-lg font-semibold tracking-tight text-ink">graphite</span>
+          <span className="inline-block -rotate-2 font-retro text-sm leading-relaxed text-ink">graphite</span>
         </div>
 
         <div className="flex flex-col gap-2">
-          <SectionLabel>Course</SectionLabel>
+          <Eyebrow size="card">Course</Eyebrow>
           <div className="px-1">
             <p className="text-sm font-semibold text-ink">{mockCourse.code}</p>
             <p className="text-xs text-ink-soft">{mockCourse.title}</p>
@@ -32,17 +36,17 @@ export function LeftSidebar() {
         </div>
 
         <nav className="flex flex-col gap-1">
-          <SectionLabel>Navigation</SectionLabel>
+          <Eyebrow size="card">Navigation</Eyebrow>
           {navItems.map((item) => (
             <NavLink
               key={item.label}
               to={item.to(courseId)}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
+                  'flex items-center gap-2.5 rounded-lg border-2 px-3 py-2 text-sm transition-colors',
                   isActive
-                    ? 'bg-paper font-medium text-ink shadow-sm'
-                    : 'text-ink-soft hover:bg-paper/60 hover:text-ink',
+                    ? 'border-ink/10 bg-paper-dark font-semibold text-ink shadow-chunky-sm'
+                    : 'border-transparent text-ink-soft hover:border-ink/10 hover:bg-paper-dark/60 hover:text-ink',
                 )
               }
             >
@@ -61,29 +65,47 @@ export function LeftSidebar() {
         </nav>
 
         <div className="flex flex-col gap-2">
-          <SectionLabel>Tools</SectionLabel>
+          <Eyebrow size="card">Tools</Eyebrow>
           <div className="flex flex-col gap-1">
             {toolItems.map((tool) => (
-              <div
-                key={tool}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-soft/50"
+              <NavLink
+                key={tool.label}
+                to={tool.to(courseId)}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-2.5 rounded-lg border-2 px-3 py-2 text-sm transition-colors',
+                    isActive
+                      ? 'border-ink/10 bg-paper-dark font-semibold text-ink shadow-chunky-sm'
+                      : 'border-transparent text-ink-soft hover:border-ink/10 hover:bg-paper-dark/60 hover:text-ink',
+                  )
+                }
               >
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full border border-border" aria-hidden="true" />
-                <span>{tool}</span>
-                <span className="ml-auto text-[10px] uppercase tracking-widest2 text-ink-soft/40">Soon</span>
-              </div>
+                {({ isActive }) => (
+                  <>
+                    <span
+                      className={cn('h-1.5 w-1.5 shrink-0 rounded-full', isActive ? 'bg-accent' : 'bg-border')}
+                      aria-hidden="true"
+                    />
+                    <tool.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                    <span>{tool.label}</span>
+                    <span className="ml-auto text-[10px] uppercase tracking-widest2 text-ink-soft/40">Preview</span>
+                  </>
+                )}
+              </NavLink>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="border-t border-border/70 pt-4">
+      <div className="border-t-2 border-ink/10 pt-4">
         <NavLink
           to="/settings"
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors',
-              isActive ? 'bg-paper font-medium text-ink' : 'text-ink-soft hover:bg-paper/60 hover:text-ink',
+              'flex items-center gap-2.5 rounded-lg border-2 px-3 py-2 text-sm transition-colors',
+              isActive
+                ? 'border-ink/10 bg-paper-dark font-semibold text-ink shadow-chunky-sm'
+                : 'border-transparent text-ink-soft hover:border-ink/10 hover:bg-paper-dark/60 hover:text-ink',
             )
           }
         >
@@ -92,11 +114,5 @@ export function LeftSidebar() {
         </NavLink>
       </div>
     </aside>
-  )
-}
-
-function SectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <p className="px-1 text-[11px] font-semibold uppercase tracking-widest2 text-ink-soft/70">{children}</p>
   )
 }
