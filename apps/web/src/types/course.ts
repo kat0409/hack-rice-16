@@ -18,4 +18,6 @@ export type SourceFile = {
   status: 'UPLOADED' | 'PARSING' | 'CHUNKING' | 'EMBEDDING' | 'EXTRACTING' | 'RESOLVING' | 'READY' | 'FAILED'
   pageCount?: number
   dateAdded: string
+  errorCode?: string
+  errorMessage?: string
 }

@@ -8,9 +8,10 @@ const VIEWBOX_WIDTH = 1000
 
 type LearningRouteProps = {
   steps: StudyStep[]
+  onComplete?: (step: StudyStep) => void
 }
 
-export function LearningRoute({ steps }: LearningRouteProps) {
+export function LearningRoute({ steps, onComplete }: LearningRouteProps) {
   const extraGapAfter = useMemo(
     () => steps.map((step) => (step.status === 'ACTIVE' ? 150 : 0)),
     [steps],
@@ -48,7 +49,7 @@ export function LearningRoute({ steps }: LearningRouteProps) {
             className="absolute -translate-x-1/2 -translate-y-1/2 px-2"
             style={{ left: `${point.x * 100}%`, top: point.y }}
           >
-            <RouteNode step={step} />
+            <RouteNode step={step} onComplete={onComplete} />
           </div>
         )
       })}

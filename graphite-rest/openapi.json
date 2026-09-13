@@ -1,6 +1,67 @@
 {
   "components": {
     "schemas": {
+      "ArtifactListOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ArtifactListOut",
+        "type": "object"
+      },
+      "ArtifactOut": {
+        "properties": {
+          "artifact_type": {
+            "title": "Artifact Type",
+            "type": "string"
+          },
+          "citations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphEvidenceOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "content": {
+            "additionalProperties": true,
+            "title": "Content",
+            "type": "object"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "study_step_id": {
+            "format": "uuid",
+            "title": "Study Step Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "study_step_id",
+          "artifact_type",
+          "content",
+          "created_at"
+        ],
+        "title": "ArtifactOut",
+        "type": "object"
+      },
       "Body_transcribe_course_audio_api_v1_courses__course_id__audio_transcriptions_post": {
         "properties": {
           "audio": {
@@ -569,6 +630,261 @@
         "title": "JobOut",
         "type": "object"
       },
+      "OmittedEntityOut": {
+        "properties": {
+          "knowledge_entity_id": {
+            "format": "uuid",
+            "title": "Knowledge Entity Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "knowledge_entity_id",
+          "name",
+          "reason"
+        ],
+        "title": "OmittedEntityOut",
+        "type": "object"
+      },
+      "StudySessionCreate": {
+        "properties": {
+          "available_minutes": {
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Available Minutes",
+            "type": "integer"
+          },
+          "goal_text": {
+            "title": "Goal Text",
+            "type": "string"
+          },
+          "weakness_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weakness Text"
+          }
+        },
+        "required": [
+          "goal_text",
+          "available_minutes"
+        ],
+        "title": "StudySessionCreate",
+        "type": "object"
+      },
+      "StudySessionListOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StudySessionSummaryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "StudySessionListOut",
+        "type": "object"
+      },
+      "StudySessionOut": {
+        "properties": {
+          "allocated_minutes": {
+            "title": "Allocated Minutes",
+            "type": "integer"
+          },
+          "available_minutes": {
+            "title": "Available Minutes",
+            "type": "integer"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "goal_text": {
+            "title": "Goal Text",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "omitted_entities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OmittedEntityOut"
+            },
+            "title": "Omitted Entities",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StudyStepOut"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "course_id",
+          "status",
+          "goal_text",
+          "available_minutes",
+          "allocated_minutes",
+          "explanation",
+          "steps"
+        ],
+        "title": "StudySessionOut",
+        "type": "object"
+      },
+      "StudySessionSummaryOut": {
+        "properties": {
+          "available_minutes": {
+            "title": "Available Minutes",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "goal_text": {
+            "title": "Goal Text",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_text",
+          "available_minutes",
+          "created_at"
+        ],
+        "title": "StudySessionSummaryOut",
+        "type": "object"
+      },
+      "StudyStepOut": {
+        "properties": {
+          "activity_type": {
+            "title": "Activity Type",
+            "type": "string"
+          },
+          "allocated_minutes": {
+            "title": "Allocated Minutes",
+            "type": "integer"
+          },
+          "citations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphEvidenceOut"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "entity_name": {
+            "title": "Entity Name",
+            "type": "string"
+          },
+          "entity_type": {
+            "title": "Entity Type",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "knowledge_entity_id": {
+            "format": "uuid",
+            "title": "Knowledge Entity Id",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "priority_score": {
+            "title": "Priority Score",
+            "type": "number"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "default": "TODO",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "position",
+          "knowledge_entity_id",
+          "entity_name",
+          "entity_type",
+          "allocated_minutes",
+          "activity_type",
+          "reason",
+          "priority_score"
+        ],
+        "title": "StudyStepOut",
+        "type": "object"
+      },
+      "StudyStepPatch": {
+        "properties": {
+          "status": {
+            "enum": [
+              "TODO",
+              "ACTIVE",
+              "COMPLETE",
+              "SKIPPED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "StudyStepPatch",
+        "type": "object"
+      },
       "TranscriptionResponse": {
         "description": "\u00a710.4 voice input: the backend's job is only to produce editable text \u2014\nthe frontend decides what happens with it next.",
         "properties": {
@@ -944,6 +1260,18 @@
               "title": "Course Id",
               "type": "string"
             }
+          },
+          {
+            "description": "Transcribe PDFs that have no text layer (scans, photographed handwriting). This sends page images to the model provider, which is more than the text excerpts normally sent, so it is off by default (design-doc.md \u00a78.11).",
+            "in": "query",
+            "name": "ocr",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Transcribe PDFs that have no text layer (scans, photographed handwriting). This sends page images to the model provider, which is more than the text excerpts normally sent, so it is off by default (design-doc.md \u00a78.11).",
+              "title": "Ocr",
+              "type": "boolean"
+            }
           }
         ],
         "requestBody": {
@@ -986,7 +1314,7 @@
     },
     "/api/v1/courses/{course_id}/graph": {
       "get": {
-        "description": "design-doc.md \u00a711.3 graph DTO. Real query against `knowledge_entities`\nfor nodes (empty today since no worker has ever written to it \u2014 see\narchitecture-mental-model.md \u00a76). Edges are intentionally always `[]`:\n\u00a77.2/\u00a77.3 place relationship topology (source/target) canonically in\nApache AGE, and the LLM entity-extraction -> AGE graph-write pipeline\n(design-doc.md \u00a78.5-8.9, architecture-mental-model.md \u00a76) is out of scope\nfor this pass. TODO: once that pipeline exists, hydrate edges with a\n`cypher('graphite', ...)` traversal joined against `graph_relationships`\n(confidence/rationale/status) and `relationship_evidence`, exactly as\narchitecture-mental-model.md \u00a77 \"Goal/read flow\" describes.",
+        "description": "The design-doc.md \u00a711.3 graph DTO, nodes and edges both real.\n\nEdges used to be hardcoded `[]` because relationship endpoints live\ncanonically in Apache AGE (\u00a77.2/\u00a77.3) and the old asyncpg pool pinned\n`search_path = public`, so it could not run Cypher at all. Both halves now\ncome from GraphRepository, which is the only module permitted to issue\nCypher (\u00a77.3 invariant 5) and which hydrates AGE topology with relational\nmetadata and evidence by application UUID \u2014 never through AGE's internal\ngraphid (invariant 4).",
         "operationId": "get_course_graph_api_v1_courses__course_id__graph_get",
         "parameters": [
           {
@@ -1028,6 +1356,101 @@
         ]
       }
     },
+    "/api/v1/courses/{course_id}/study-sessions": {
+      "get": {
+        "operationId": "list_study_sessions_api_v1_courses__course_id__study_sessions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudySessionListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Study Sessions",
+        "tags": [
+          "study-sessions"
+        ]
+      },
+      "post": {
+        "description": "Turn a goal into an ordered, time-boxed, cited route (\u00a711.4 -> \u00a711.5).\n\nThe ordering is computed by deterministic graph traversal, not by asking a\nmodel for a plan (\u00a70.2 principle 2). A model may later explain or enrich a\nroute, but it cannot reorder one.",
+        "operationId": "create_study_session_api_v1_courses__course_id__study_sessions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudySessionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudySessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Study Session",
+        "tags": [
+          "study-sessions"
+        ]
+      }
+    },
     "/api/v1/documents/{document_id}": {
       "delete": {
         "operationId": "delete_document_api_v1_documents__document_id__delete",
@@ -1059,6 +1482,50 @@
           }
         },
         "summary": "Delete Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/v1/documents/{document_id}/extract": {
+      "post": {
+        "description": "Re-run only the graph-extraction stage; chunks are kept (\u00a75.3 retry).",
+        "operationId": "rerun_extraction_api_v1_documents__document_id__extract_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rerun Extraction",
         "tags": [
           "documents"
         ]
@@ -1104,6 +1571,285 @@
         "summary": "Get Job",
         "tags": [
           "jobs"
+        ]
+      }
+    },
+    "/api/v1/narrations/{narration_id}/audio": {
+      "get": {
+        "operationId": "narration_audio_api_v1_narrations__narration_id__audio_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "narration_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Narration Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Narration Audio",
+        "tags": [
+          "narration"
+        ]
+      }
+    },
+    "/api/v1/study-artifacts/{artifact_id}/narration": {
+      "post": {
+        "operationId": "create_narration_api_v1_study_artifacts__artifact_id__narration_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Narration",
+        "tags": [
+          "narration"
+        ]
+      }
+    },
+    "/api/v1/study-sessions/{session_id}": {
+      "get": {
+        "operationId": "get_study_session_api_v1_study_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudySessionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Study Session",
+        "tags": [
+          "study-sessions"
+        ]
+      }
+    },
+    "/api/v1/study-steps/{step_id}": {
+      "patch": {
+        "operationId": "patch_study_step_api_v1_study_steps__step_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "step_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Step Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudyStepPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudyStepOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Study Step",
+        "tags": [
+          "study-sessions"
+        ]
+      }
+    },
+    "/api/v1/study-steps/{step_id}/artifacts": {
+      "get": {
+        "operationId": "list_artifacts_api_v1_study_steps__step_id__artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "step_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Step Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Artifacts",
+        "tags": [
+          "study-artifacts"
+        ]
+      },
+      "post": {
+        "description": "Generate (or return the cached) study material for one route step (\u00a710.1).",
+        "operationId": "create_artifact_api_v1_study_steps__step_id__artifacts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "step_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Step Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": true,
+            "schema": {
+              "enum": [
+                "SUMMARY",
+                "FLASHCARDS",
+                "QUESTIONS"
+              ],
+              "title": "Type",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Artifact",
+        "tags": [
+          "study-artifacts"
         ]
       }
     },

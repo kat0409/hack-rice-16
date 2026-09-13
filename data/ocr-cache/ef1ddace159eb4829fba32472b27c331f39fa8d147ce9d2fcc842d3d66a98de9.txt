@@ -1,0 +1,3 @@
+Dynamic Programming
+Overlapping subproblems plus optimal
+substructure. Memoize to avoid recompute.

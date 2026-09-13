@@ -1,6 +1,6 @@
-import { NavLink, useParams } from 'react-router-dom'
+import { Link, NavLink, useParams } from 'react-router-dom'
 import { BookOpen, Compass, FileText, Layers, Map, Mic, Settings as SettingsIcon, Target } from 'lucide-react'
-import { DEMO_COURSE_ID, mockCourse } from '@/data/mockCourse'
+import { useCourse } from '@/hooks/useCourse'
 import { cn } from '@/lib/cn'
 import { Eyebrow } from '@/components/ui/Eyebrow'
 
@@ -18,20 +18,35 @@ const toolItems = [
 ]
 
 export function LeftSidebar() {
-  const { courseId = DEMO_COURSE_ID } = useParams()
+  const { courseId } = useParams()
+  const { course } = useCourse(courseId)
+
+  if (!courseId) {
+    return (
+      <aside className="sticky top-0 hidden h-screen w-[240px] shrink-0 flex-col border-r-2 border-ink/10 bg-paper px-5 py-6 md:flex">
+        <div className="px-1">
+          <span className="inline-block -rotate-2 font-retro text-sm leading-relaxed text-ink">graphite</span>
+        </div>
+      </aside>
+    )
+  }
 
   return (
     <aside className="sticky top-0 hidden h-screen w-[240px] shrink-0 flex-col justify-between overflow-y-auto border-r-2 border-ink/10 bg-paper px-5 py-6 md:flex">
       <div className="flex flex-col gap-8">
         <div className="px-1">
-          <span className="inline-block -rotate-2 font-retro text-sm leading-relaxed text-ink">graphite</span>
+          <Link to="/" className="inline-block -rotate-2 font-retro text-sm leading-relaxed text-ink">
+            graphite
+          </Link>
         </div>
 
         <div className="flex flex-col gap-2">
-          <Eyebrow size="card">Course</Eyebrow>
+          <Eyebrow size="card">Subject</Eyebrow>
           <div className="px-1">
-            <p className="text-sm font-semibold text-ink">{mockCourse.code}</p>
-            <p className="text-xs text-ink-soft">{mockCourse.title}</p>
+            <p className="text-sm font-semibold text-ink">{course?.name ?? '…'}</p>
+            <Link to="/" className="text-xs text-ink-soft hover:text-ink hover:underline">
+              Switch subject
+            </Link>
           </div>
         </div>
 
@@ -88,7 +103,6 @@ export function LeftSidebar() {
                     />
                     <tool.icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
                     <span>{tool.label}</span>
-                    <span className="ml-auto text-[10px] uppercase tracking-widest2 text-ink-soft/40">Preview</span>
                   </>
                 )}
               </NavLink>

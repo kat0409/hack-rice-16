@@ -5,11 +5,12 @@ import logging
 import uuid
 from pathlib import Path
 
-import asyncpg
+import psycopg
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
-from app.config import Settings, get_settings
+from graphite.config import Settings, get_settings
 from app.deps import get_db
+from app.routers.courses import _row, _rows
 from app.errors import AppError
 from app.files import (
     ALLOWED_EXTENSIONS,
@@ -34,7 +35,7 @@ logger = logging.getLogger("graphite")
 router = APIRouter(tags=["documents"])
 
 
-def _row_to_document(row: asyncpg.Record) -> DocumentOut:
+def _row_to_document(row: dict) -> DocumentOut:
     return DocumentOut(
         id=row["id"],
         course_id=row["course_id"],
@@ -49,7 +50,7 @@ def _row_to_document(row: asyncpg.Record) -> DocumentOut:
     )
 
 
-def _row_to_job(row: asyncpg.Record) -> JobOut:
+def _row_to_job(row: dict) -> JobOut:
     payload = row["payload"]
     error = row["error"]
     return JobOut(
@@ -75,10 +76,19 @@ def _row_to_job(row: asyncpg.Record) -> JobOut:
 async def upload_documents(
     course_id: uuid.UUID,
     files: list[UploadFile] = File(...),
-    db: asyncpg.Pool = Depends(get_db),
+    ocr: bool = Query(
+        default=False,
+        description=(
+            "Transcribe PDFs that have no text layer (scans, photographed "
+            "handwriting). This sends page images to the model provider, which "
+            "is more than the text excerpts normally sent, so it is off by "
+            "default (design-doc.md §8.11)."
+        ),
+    ),
+    db: psycopg.Connection = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> DocumentUploadResponse:
-    await require_course(course_id, db)
+    require_course(course_id, db)
 
     if not files:
         raise AppError(code="NO_FILES", message="No files were uploaded.", status_code=400)
@@ -100,11 +110,12 @@ async def upload_documents(
             )
 
             # Check duplicate-in-course before touching the filesystem.
-            existing = await db.fetchval(
-                "SELECT id FROM documents WHERE course_id = $1 AND sha256 = $2",
-                course_id,
-                digest,
+            existing_row = _row(
+                db,
+                "SELECT id FROM documents WHERE course_id = %s AND sha256 = %s",
+                (course_id, digest),
             )
+            existing = existing_row["id"] if existing_row else None
             if existing is not None:
                 rejected.append(
                     {
@@ -130,42 +141,41 @@ async def upload_documents(
 
         # Insert document + job in one transaction (a real connection, not a pool).
         try:
-            async with db.acquire() as conn:
-                async with conn.transaction():
-                    doc_row = await conn.fetchrow(
-                        """
-                        INSERT INTO documents
-                            (id, course_id, filename, mime_type, sha256, local_path, status)
-                        VALUES ($1, $2, $3, $4, $5, $6, 'UPLOADED')
-                        RETURNING id, course_id, filename, mime_type, sha256, status,
-                                  error_code, error_message, page_count, created_at
-                        """,
-                        document_id,
-                        course_id,
-                        original_name,
-                        mime_type,
-                        digest,
-                        str(dest_path),
-                    )
-                    job_row = await conn.fetchrow(
-                        """
-                        INSERT INTO jobs
-                            (course_id, document_id, job_type, status, stage, payload)
-                        VALUES ($1, $2, 'INGEST_DOCUMENT', 'QUEUED', 'UPLOADED', $3::jsonb)
-                        RETURNING id, course_id, document_id, job_type, status, stage,
-                                  attempts, payload, error, created_at, completed_at
-                        """,
-                        course_id,
-                        document_id,
-                        json.dumps({"filename": original_name}),
-                    )
+            # Both inserts share the request connection, so the document and
+            # its job commit together or not at all.
+            doc_row = _row(
+                db,
+                """
+                INSERT INTO documents
+                    (id, course_id, filename, mime_type, sha256, local_path, status)
+                VALUES (%s, %s, %s, %s, %s, %s, 'UPLOADED')
+                RETURNING id, course_id, filename, mime_type, sha256, status,
+                          error_code, error_message, page_count, created_at
+                """,
+                (document_id, course_id, original_name, mime_type, digest, str(dest_path)),
+            )
+            job_row = _row(
+                db,
+                """
+                INSERT INTO jobs
+                    (course_id, document_id, job_type, status, stage, payload)
+                VALUES (%s, %s, 'INGEST_DOCUMENT', 'QUEUED', 'UPLOADED', %s::jsonb)
+                RETURNING id, course_id, document_id, job_type, status, stage,
+                          attempts, payload, error, created_at, completed_at
+                """,
+                (
+                    course_id,
+                    document_id,
+                    json.dumps({"filename": original_name, "ocr": ocr}),
+                ),
+            )
             uploaded.append(
                 DocumentUploadResult(
                     document=_row_to_document(doc_row),
                     job=_row_to_job(job_row),
                 )
             )
-        except asyncpg.UniqueViolationError:
+        except psycopg.errors.UniqueViolation:
             # TOCTOU: another concurrent upload of the same bytes won the race
             # between our pre-check above and this INSERT.
             dest_path.unlink(missing_ok=True)
@@ -188,51 +198,90 @@ async def upload_documents(
                 }
             )
 
-    # TODO(design-doc.md §8.1-8.4): a background worker should now claim the
-    # QUEUED INGEST_DOCUMENT job(s) above with `FOR UPDATE SKIP LOCKED` and run
-    # parse -> chunk -> embed -> extract -> resolve -> persist. Not built here —
-    # see architecture-mental-model.md §6 "Ingestion/write flow". Documents
-    # intentionally sit at status='UPLOADED' with no further processing.
+    # graphite.worker claims these jobs and runs parse -> chunk -> embed -> extract.
     return DocumentUploadResponse(uploaded=uploaded, rejected=rejected)
 
 
+@router.post(
+    "/documents/{document_id}/extract",
+    response_model=JobOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def rerun_extraction(
+    document_id: uuid.UUID, db: psycopg.Connection = Depends(get_db)
+) -> JobOut:
+    """Re-run only the graph-extraction stage; chunks are kept (§5.3 retry)."""
+    doc = _row(db, "SELECT id, course_id FROM documents WHERE id = %s", (document_id,))
+    if doc is None:
+        raise AppError(
+            code="DOCUMENT_NOT_FOUND",
+            message=f"No document with id {document_id}.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    if _row(db, "SELECT 1 FROM chunks WHERE document_id = %s LIMIT 1", (document_id,)) is None:
+        raise AppError(
+            code="DOCUMENT_NOT_EMBEDDED",
+            message="This document has no stored chunks yet, so there is nothing to extract.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    if _row(
+        db,
+        "SELECT 1 FROM jobs WHERE document_id = %s AND status IN ('QUEUED','RUNNING') LIMIT 1",
+        (document_id,),
+    ):
+        raise AppError(
+            code="EXTRACTION_IN_PROGRESS",
+            message="A job for this document is already queued or running.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    job_row = _row(
+        db,
+        """
+        INSERT INTO jobs (course_id, document_id, job_type, status, stage, payload)
+        VALUES (%s, %s, 'EXTRACT_DOCUMENT', 'QUEUED', 'EMBEDDING', '{}'::jsonb)
+        RETURNING id, course_id, document_id, job_type, status, stage,
+                  attempts, payload, error, created_at, completed_at
+        """,
+        (doc["course_id"], document_id),
+    )
+    return _row_to_job(job_row)
+
+
 @router.get("/courses/{course_id}/documents", response_model=DocumentListOut)
-async def list_documents(
+def list_documents(
     course_id: uuid.UUID,
     limit: int = Query(default=50, ge=1, le=200),
     cursor: str | None = Query(default=None),
-    db: asyncpg.Pool = Depends(get_db),
+    db: psycopg.Connection = Depends(get_db),
 ) -> DocumentListOut:
-    await require_course(course_id, db)
+    require_course(course_id, db)
 
     if cursor is not None:
         created_at, last_id = decode_cursor(cursor)
-        rows = await db.fetch(
+        rows = _rows(
+            db,
             """
             SELECT id, course_id, filename, mime_type, sha256, status,
                    error_code, error_message, page_count, created_at
             FROM documents
-            WHERE course_id = $1 AND (created_at, id) < ($2, $3)
+            WHERE course_id = %s AND (created_at, id) < (%s, %s)
             ORDER BY created_at DESC, id DESC
-            LIMIT $4
+            LIMIT %s
             """,
-            course_id,
-            created_at,
-            last_id,
-            limit,
+            (course_id, created_at, last_id, limit),
         )
     else:
-        rows = await db.fetch(
+        rows = _rows(
+            db,
             """
             SELECT id, course_id, filename, mime_type, sha256, status,
                    error_code, error_message, page_count, created_at
             FROM documents
-            WHERE course_id = $1
+            WHERE course_id = %s
             ORDER BY created_at DESC, id DESC
-            LIMIT $2
+            LIMIT %s
             """,
-            course_id,
-            limit,
+            (course_id, limit),
         )
 
     items = [_row_to_document(r) for r in rows]
@@ -244,10 +293,10 @@ async def list_documents(
 
 
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_document(document_id: uuid.UUID, db: asyncpg.Pool = Depends(get_db)) -> None:
-    row = await db.fetchrow(
-        "SELECT id, local_path FROM documents WHERE id = $1", document_id
-    )
+def delete_document(
+    document_id: uuid.UUID, db: psycopg.Connection = Depends(get_db)
+) -> None:
+    row = _row(db, "SELECT id, local_path FROM documents WHERE id = %s", (document_id,))
     if row is None:
         raise AppError(
             code="DOCUMENT_NOT_FOUND",
@@ -255,7 +304,8 @@ async def delete_document(document_id: uuid.UUID, db: asyncpg.Pool = Depends(get
             status_code=status.HTTP_404_NOT_FOUND,
         )
 
-    await db.execute("DELETE FROM documents WHERE id = $1", document_id)
+    with db.cursor() as cur:
+        cur.execute("DELETE FROM documents WHERE id = %s", (document_id,))
 
     Path(row["local_path"]).unlink(missing_ok=True)
 

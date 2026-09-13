@@ -6,9 +6,10 @@ import { Heading } from '@/components/ui/Heading'
 
 type RouteNodeProps = {
   step: StudyStep
+  onComplete?: (step: StudyStep) => void
 }
 
-export function RouteNode({ step }: RouteNodeProps) {
+export function RouteNode({ step, onComplete }: RouteNodeProps) {
   const isReinforcement = step.isReinforcement === true
 
   if (step.status === 'COMPLETE') {
@@ -43,6 +44,23 @@ export function RouteNode({ step }: RouteNodeProps) {
           <p className="mt-1 text-xs text-ink-soft">
             Current step · {step.allocatedMinutes} min · {activityLabel(step.activityType)}
           </p>
+          <p className="mt-2 text-xs leading-relaxed text-ink-soft">{step.reason}</p>
+          {step.citations[0] && (
+            <p className="mt-2 font-serif text-[11px] italic leading-relaxed text-ink-soft/80">
+              &ldquo;{step.citations[0].excerpt}&rdquo;
+              <span className="block not-italic text-ink-soft/60">— {step.citations[0].label}</span>
+            </p>
+          )}
+          {onComplete && (
+            <button
+              type="button"
+              onClick={() => onComplete(step)}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-accent px-3.5 py-1.5 text-xs font-semibold text-paper shadow-chunky-accent active:translate-y-[2px] active:shadow-none"
+            >
+              <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Mark done
+            </button>
+          )}
         </div>
       </div>
     )

@@ -7,10 +7,19 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import db
-from app.config import get_settings
+from graphite import db
+from graphite.config import get_settings
 from app.errors import register_exception_handlers
-from app.routers import audio, courses, documents, graph, jobs
+from app.routers import (
+    artifacts,
+    audio,
+    courses,
+    documents,
+    graph,
+    jobs,
+    narration,
+    study_sessions,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("graphite")
@@ -20,7 +29,7 @@ logger = logging.getLogger("graphite")
 async def lifespan(app: FastAPI):
     settings = get_settings()
     settings.upload_dir_path.mkdir(parents=True, exist_ok=True)
-    await db.connect()
+    db.connect()
     if db.get_pool() is None:
         logger.warning(
             "Starting without a database connection — DB-backed routes will "
@@ -28,7 +37,7 @@ async def lifespan(app: FastAPI):
             "(`make db-up` from the repo root)."
         )
     yield
-    await db.disconnect()
+    db.disconnect()
 
 
 def create_app() -> FastAPI:
@@ -59,7 +68,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["health"])
     async def health() -> dict:
-        db_ok = await db.is_healthy()
+        db_ok = db.is_healthy()
         return {
             "status": "ok" if db_ok else "degraded",
             "database": "up" if db_ok else "down",
@@ -71,6 +80,9 @@ def create_app() -> FastAPI:
     api_v1.include_router(jobs.router)
     api_v1.include_router(graph.router)
     api_v1.include_router(audio.router)
+    api_v1.include_router(study_sessions.router)
+    api_v1.include_router(artifacts.router)
+    api_v1.include_router(narration.router)
     app.include_router(api_v1)
 
     return app

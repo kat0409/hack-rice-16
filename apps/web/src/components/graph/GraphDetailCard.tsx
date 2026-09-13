@@ -1,4 +1,5 @@
-import { X } from 'lucide-react'
+import { useState } from 'react'
+import { ChevronDown, X } from 'lucide-react'
 import type { GraphEdge, GraphNode } from '@/types/graph'
 import { NODE_TYPE_STYLE, RELATION_STYLE } from '@/lib/graphTheme'
 import { cn } from '@/lib/cn'
@@ -31,9 +32,10 @@ function MeterBar({ value, color }: { value: number; color: string }) {
 
 export function GraphDetailCard({ node, connected, onClose, onSelectNode }: GraphDetailCardProps) {
   const style = NODE_TYPE_STYLE[node.type]
+  const [expandedEdgeId, setExpandedEdgeId] = useState<string | null>(null)
 
   return (
-    <div className="pointer-events-auto absolute bottom-4 left-4 z-20 w-[280px] -rotate-1 rounded-sm border-2 border-ink/15 bg-[#FCF9F0] p-4 shadow-chunky sm:w-[300px]">
+    <div className="pointer-events-auto absolute bottom-4 left-4 z-20 max-h-[70%] w-[280px] -rotate-1 overflow-y-auto rounded-sm border-2 border-ink/15 bg-[#FCF9F0] p-4 shadow-chunky sm:w-[320px]">
       <span
         className="absolute -top-2.5 left-1/2 h-5 w-9 -translate-x-1/2 rotate-2 rounded-[2px] bg-[#E8DFB8]/80 shadow-sm"
         aria-hidden="true"
@@ -85,23 +87,53 @@ export function GraphDetailCard({ node, connected, onClose, onSelectNode }: Grap
           <ul className="mt-1.5 flex flex-col gap-1">
             {connected.map(({ edge, other, direction }) => {
               const relation = RELATION_STYLE[edge.relationType]
+              const expanded = expandedEdgeId === edge.id
+              const evidence = edge.evidence[0]
               return (
-                <li key={edge.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelectNode(other.id)}
-                    className="group flex w-full items-baseline gap-1.5 rounded px-1 py-0.5 text-left text-xs hover:bg-ink/5"
-                  >
-                    <span
-                      className={cn('shrink-0 text-[10px] italic text-ink-soft/60')}
-                      style={{ color: relation.color }}
+                <li key={edge.id} className="rounded px-1 py-0.5 hover:bg-ink/5">
+                  <div className="flex items-baseline gap-1.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedEdgeId(expanded ? null : edge.id)}
+                      className="flex min-w-0 flex-1 items-baseline gap-1.5 text-left"
+                      aria-expanded={expanded}
                     >
-                      {direction === 'outgoing' ? relation.label : `← ${relation.label}`}
-                    </span>
-                    <span className="truncate font-medium text-ink-soft group-hover:text-ink group-hover:underline">
-                      {other.name}
-                    </span>
-                  </button>
+                      <span className="shrink-0 text-[10px] italic" style={{ color: relation.color }}>
+                        {direction === 'outgoing' ? relation.label : `← ${relation.label}`}
+                      </span>
+                      <span className="truncate font-medium text-ink-soft">{other.name}</span>
+                      <ChevronDown
+                        className={cn('ml-auto h-3 w-3 shrink-0 text-ink-soft/50 transition-transform', expanded && 'rotate-180')}
+                      />
+                    </button>
+                  </div>
+                  {expanded && (
+                    <div className="mb-1 mt-1.5 flex flex-col gap-1.5 border-l-2 border-ink/10 pl-2">
+                      <div className="flex items-center gap-2">
+                        <Eyebrow size="card">Confidence</Eyebrow>
+                        <div className="flex-1"><MeterBar value={edge.confidence} color={relation.color} /></div>
+                        {edge.confidence < 0.5 && (
+                          <span className="text-[10px] uppercase tracking-widest2 text-ink-soft/60">review</span>
+                        )}
+                      </div>
+                      {edge.rationale && <p className="text-[11px] leading-relaxed text-ink-soft">{edge.rationale}</p>}
+                      {evidence ? (
+                        <p className="font-serif text-[11px] italic leading-relaxed text-ink-soft">
+                          &ldquo;{evidence.excerpt}&rdquo;
+                          <span className="mt-0.5 block not-italic text-ink-soft/60">— {evidence.label}</span>
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-ink-soft/60">No source excerpt recorded.</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onSelectNode(other.id)}
+                        className="self-start text-[11px] font-semibold text-accent hover:underline"
+                      >
+                        Go to {other.name}
+                      </button>
+                    </div>
+                  )}
                 </li>
               )
             })}

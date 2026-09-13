@@ -99,3 +99,44 @@ async def transcribe_audio(
         )
 
     return TranscriptionResult(text=text, language_code=body.get("language_code"))
+
+
+ELEVENLABS_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+TTS_MODEL_ID = "eleven_turbo_v2_5"
+
+
+def synthesize_speech(*, api_key: str, voice_id: str, text: str) -> bytes:
+    """Text -> MP3 bytes (design-doc.md §10.3). Sync: called from a threadpool route."""
+    try:
+        response = httpx.post(
+            ELEVENLABS_TTS_URL.format(voice_id=voice_id),
+            headers={"xi-api-key": api_key, "Accept": "audio/mpeg"},
+            json={"text": text, "model_id": TTS_MODEL_ID},
+            timeout=120.0,
+        )
+    except httpx.RequestError:
+        logger.exception("ElevenLabs text-to-speech request failed (network error)")
+        raise AppError(
+            code="NARRATION_UNAVAILABLE",
+            message="Could not reach the narration provider. Please retry.",
+            status_code=503,
+            retryable=True,
+        ) from None
+
+    if response.status_code == 401:
+        logger.error("ElevenLabs text-to-speech rejected the configured API key")
+        raise AppError(
+            code="NARRATION_UNAVAILABLE",
+            message="Narration provider rejected the configured credentials.",
+            status_code=503,
+            retryable=False,
+        )
+    if response.status_code >= 400:
+        logger.error("ElevenLabs text-to-speech returned status %s", response.status_code)
+        raise AppError(
+            code="NARRATION_FAILED",
+            message="The narration provider could not voice this text.",
+            status_code=502,
+            retryable=True,
+        )
+    return response.content

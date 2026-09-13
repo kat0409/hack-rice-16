@@ -39,7 +39,7 @@ export function GraphEdgeLine({ edge, from, to, fromRadius, toRadius, active, di
   const markerId = `arrow-${edge.relationType}`
 
   return (
-    <g opacity={dimmed && !active ? 0.16 : active ? 1 : 0.62}>
+    <g opacity={(dimmed && !active ? 0.16 : active ? 1 : 0.62) * (edge.confidence < 0.5 ? 0.55 : 1)}>
       <path
         d={path}
         fill="none"

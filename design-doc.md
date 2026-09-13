@@ -302,7 +302,7 @@ The main application is a workspace, not a chat transcript.
 - Large drag-and-drop area.
 - Supported-file list.
 - Example goal shown as inactive guidance.
-- Privacy note: files remain local; selected excerpts are sent to the configured model provider for processing.
+- Privacy note: files remain local; selected excerpts are sent to the configured model provider for processing. Embeddings run locally. If the user opts into OCR for a scanned or handwritten PDF, page images are also sent for transcription — that is off by default and must be stated at the point of upload, not buried here.
 
 #### B. Ingestion in progress
 
@@ -2141,7 +2141,9 @@ Never make the core value depend on a cold model call finishing on stage.
 
 **Upload label:** Add course material
 
-**Privacy note:** Your files and study data stay on this device. Relevant excerpts are sent only to your configured model provider to build the graph and study materials.
+**Privacy note:** Your files and study data stay on this device. Relevant excerpts are sent to your configured model provider to build the graph and study materials. Embeddings are computed locally and never leave your machine.
+
+**OCR note (shown only when a scanned or handwritten PDF is uploaded):** This file has no selectable text, so reading it means sending pictures of its pages to your model provider for transcription. That is more than the text excerpts we normally send. Turn on OCR for this upload to continue, or re-upload a text-based export instead.
 
 ### 20.2 Goal composer
 

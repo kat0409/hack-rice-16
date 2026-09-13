@@ -1,0 +1,7 @@
+Binary Search
+
+Binary search requires a sorted
+array and halves the search range
+on every step.
+
+Worst case running time: $O(\log n)$

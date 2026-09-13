@@ -1,0 +1,7 @@
+Recursion
+
+A recursive function calls itself
+on a smaller subproblem until it
+reaches a base case.
+
+$T(n) = 2\,T(n/2) + O(n)$

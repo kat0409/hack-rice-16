@@ -7,8 +7,25 @@ requires-python = ">=3.12"
 dependencies = [
     "asyncpg>=0.31.0",
     "fastapi>=0.141.1",
+    "fastembed>=0.4",
+    "google-genai>=0.8",
     "httpx>=0.28.1",
+    "psycopg[binary,pool]>=3.2",
     "pydantic-settings>=2.15.0",
+    "pymupdf>=1.24",
+    "python-docx>=1.1",
     "python-multipart>=0.0.32",
     "uvicorn[standard]>=0.52.4",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The project is not installed as a package, so the source tree has to be made
+# importable for tests the same way `python -m graphite.ingest` does. Without
+# this every test fails to collect with "No module named 'graphite'".
+pythonpath = ["."]

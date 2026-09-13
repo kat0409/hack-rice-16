@@ -4,10 +4,10 @@ import hashlib
 import json
 import uuid
 
-import asyncpg
+import psycopg
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
-from app.config import Settings, get_settings
+from graphite.config import Settings, get_settings
 from app.deps import get_db
 from app.errors import AppError
 from app.routers.courses import require_course
@@ -39,10 +39,10 @@ async def transcribe_course_audio(
             "text to the caller."
         ),
     ),
-    db: asyncpg.Pool = Depends(get_db),
+    db: psycopg.Connection = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> TranscriptionResponse:
-    await require_course(course_id, db)
+    require_course(course_id, db)
 
     if not settings.elevenlabs_api_key:
         raise AppError(
@@ -83,29 +83,28 @@ async def transcribe_course_audio(
         digest = hashlib.sha256(result.text.encode("utf-8")).hexdigest()
         filename = f"voice-transcript-{document_id.hex[:8]}.txt"
 
-        async with db.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute(
-                    """
-                    INSERT INTO documents
-                        (id, course_id, filename, mime_type, sha256, local_path, status)
-                    VALUES ($1, $2, $3, 'text/plain', $4, $5, 'UPLOADED')
-                    """,
-                    document_id,
-                    course_id,
-                    filename,
-                    digest,
-                    str(dest_path),
-                )
-                await conn.execute(
-                    """
-                    INSERT INTO jobs (course_id, document_id, job_type, status, stage, payload)
-                    VALUES ($1, $2, 'INGEST_DOCUMENT', 'QUEUED', 'UPLOADED', $3::jsonb)
-                    """,
+        # Both inserts share the request's connection, so they commit together
+        # when the handler returns and roll back together on error.
+        with db.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO documents
+                    (id, course_id, filename, mime_type, sha256, local_path, status)
+                VALUES (%s, %s, %s, 'text/plain', %s, %s, 'UPLOADED')
+                """,
+                (document_id, course_id, filename, digest, str(dest_path)),
+            )
+            cur.execute(
+                """
+                INSERT INTO jobs (course_id, document_id, job_type, status, stage, payload)
+                VALUES (%s, %s, 'INGEST_DOCUMENT', 'QUEUED', 'UPLOADED', %s::jsonb)
+                """,
+                (
                     course_id,
                     document_id,
                     json.dumps({"filename": filename, "source": "audio-transcription"}),
-                )
+                ),
+            )
 
     return TranscriptionResponse(
         text=result.text,

@@ -1,6 +1,6 @@
 import type { Citation } from './study'
 
-export type GraphNodeType = 'CONCEPT' | 'SKILL' | 'FORMULA' | 'PROCESS' | 'EXAMPLE'
+export type GraphNodeType = 'CONCEPT' | 'SKILL' | 'FORMULA' | 'PROCEDURE' | 'PROCEDURE_STEP' | 'EXAMPLE'
 
 export type GraphNode = {
   id: string
@@ -10,6 +10,7 @@ export type GraphNode = {
   importance: number
   confidence: number
   sourceCount: number
+  aliases: string[]
 }
 
 export type RelationType =
@@ -20,6 +21,9 @@ export type RelationType =
   | 'APPLIED_IN'
   | 'DERIVED_FROM'
   | 'RELATED_TO'
+  | 'HAS_STEP'
+  | 'NEXT'
+  | 'PRODUCES'
 
 export type GraphEdge = {
   id: string

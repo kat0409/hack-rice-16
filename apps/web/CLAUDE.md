@@ -17,11 +17,13 @@ npx tsc -b --noEmit   # typecheck only, no emit — closest thing to a test suit
 
 There is no test runner configured in this project. Don't go looking for one or suggest adding one unless asked.
 
-## Status: mock-data-only, no backend wiring
+## Status: fully wired to `graphite-rest`
 
-Every page reads from local mock data in `src/data/` (`mockCourse.ts`, `mockGraph.ts`, `mockStudyMaterials.ts`). Nothing calls a network API. A real backend exists at `../../graphite-rest` (FastAPI, see its own `CLAUDE.md`) implementing part of the `design-doc.md` §11 contract, but frontend integration hasn't started. When that work begins: the backend's DTOs are snake_case (`source_count`, `relation_type`); this app's types (`src/types/`) are camelCase. Adapt at the fetch boundary — don't rename backend fields or frontend types to force a match.
+Every page calls the real API through `src/lib/api.ts` (needs the backend + worker running; `VITE_API_BASE_URL` in `.env`, default `http://127.0.0.1:8000/api/v1`). The backend's DTOs are snake_case; this app's types (`src/types/`) are camelCase. Conversion happens once, in `src/lib/mappers.ts` — don't rename backend fields or frontend types to force a match.
 
-`DEMO_COURSE_ID` (from `mockCourse.ts`) is the only course that exists; all routes are nested under `/course/:courseId/...`.
+Routes nest under `/course/:courseId/...` where `courseId` is a real backend UUID. The UI calls this container a **"subject"** (a course, a certification, an exam — anything with notes); the backend keeps the `courses` table and `/courses` routes. `HomePage` lists/creates subjects.
+
+The newest study session for a subject is loaded into a tiny module-level store (`src/lib/sessionStore.ts`, `useSyncExternalStore`) by `useStudySession`; `RightStudyRail` and the study tools read the active step from it. Study tool pages (Materials = summary, Flashcards, Practice, Audio) take `?step=<stepId>` and fall back to the active step (`useStep`).
 
 ## Design system — read before touching visual code
 
@@ -61,8 +63,8 @@ All tokens live in `tailwind.config.ts`. This is a deliberate, opinionated aesth
 
 `CoursePage.tsx`'s bottom-of-route hint (`ScrollProgressHint`) is purely scroll-position-driven, not data-driven: a 1px sentinel div sits right after `<LearningRoute />`, watched by `useIsInView` (`src/hooks/useIsInView.ts`, IntersectionObserver-based). While that sentinel is on screen it shows "Done with your study route — good job!"; scrolling away from it (in either direction) reverts to "Continue your route ↓". It deliberately ignores whether the steps are actually marked complete — don't reintroduce a data-derived `isRouteComplete` check here, that was tried and explicitly replaced.
 
-## Preview-only feature pages
+## Study tool pages
 
-`FlashcardsPage`, `PracticePage`, and `AudioPage` (linked from the sidebar "Tools" section and from `MaterialsPage`) are real, interactive UI (card flip, MCQ grading, a fake audio player, an upload-to-transcribe mock) built entirely against local mock data (`src/data/mockStudyMaterials.ts`) or fake timers. They are intentionally not wired to `graphite-rest`. Each carries a `PreviewBanner` (`src/components/ui/PreviewBanner.tsx`) saying so — keep that banner on any page in this category, and don't present their content as real generated study material.
+`MaterialsPage` (summary), `FlashcardsPage`, `PracticePage`, and `AudioPage` generate their content per route step via `POST /study-steps/{id}/artifacts` (`useArtifact`); the backend caches one artifact per (step, type), so a second visit is instant. `AudioPage` narrates the step's summary through `POST /study-artifacts/{id}/narration` and plays it with a real `<audio>` element; its transcribe box calls the real speech-to-text endpoint. `PreviewBanner` (`src/components/ui/PreviewBanner.tsx`) is no longer used anywhere but kept for future preview features.
 
-`SourcesPage`'s drag-and-drop upload zone is the same kind of preview: it simulates the `documents` status pipeline (`UPLOADED → PARSING → CHUNKING → EMBEDDING → EXTRACTING → RESOLVING → READY`, matching `SourceFile['status']` in `src/types/course.ts`) with `setTimeout`, not a real call to `graphite-rest`'s `POST /api/v1/courses/{course_id}/documents`.
+`SourcesPage` uploads to `POST /api/v1/courses/{course_id}/documents` and polls `GET .../documents` every 1.5s while any row is non-terminal; status badges are real (the worker drives them). A document at `EMBEDDING` with an `error_code` shows a "Retry extraction" action.

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -120,3 +120,72 @@ class TranscriptionResponse(BaseModel):
     text: str
     language_code: str | None = None
     document_id: uuid.UUID | None = None
+
+
+# --- Study sessions (design-doc.md §11.4-11.5) ---------------------------
+
+
+class StudySessionCreate(BaseModel):
+    goal_text: str
+    available_minutes: int = Field(ge=1, le=24 * 60)
+    weakness_text: str | None = None
+
+
+class StudyStepOut(BaseModel):
+    id: uuid.UUID | None = None
+    position: int
+    knowledge_entity_id: uuid.UUID
+    entity_name: str
+    entity_type: str
+    allocated_minutes: int
+    activity_type: str
+    reason: str
+    priority_score: float
+    status: str = "TODO"
+    citations: list[GraphEvidenceOut] = []
+
+
+class StudyStepPatch(BaseModel):
+    status: Literal["TODO", "ACTIVE", "COMPLETE", "SKIPPED"]
+
+
+class StudySessionSummaryOut(BaseModel):
+    id: uuid.UUID
+    goal_text: str
+    available_minutes: int
+    created_at: datetime.datetime
+
+
+class StudySessionListOut(BaseModel):
+    items: list[StudySessionSummaryOut]
+
+
+class ArtifactOut(BaseModel):
+    id: uuid.UUID
+    study_step_id: uuid.UUID
+    artifact_type: str
+    content: dict[str, Any]
+    citations: list[GraphEvidenceOut] = []
+    created_at: datetime.datetime
+
+
+class ArtifactListOut(BaseModel):
+    items: list[ArtifactOut]
+
+
+class OmittedEntityOut(BaseModel):
+    knowledge_entity_id: uuid.UUID
+    name: str
+    reason: str
+
+
+class StudySessionOut(BaseModel):
+    id: uuid.UUID
+    course_id: uuid.UUID
+    status: str
+    goal_text: str
+    available_minutes: int
+    allocated_minutes: int
+    explanation: str
+    steps: list[StudyStepOut]
+    omitted_entities: list[OmittedEntityOut] = []
