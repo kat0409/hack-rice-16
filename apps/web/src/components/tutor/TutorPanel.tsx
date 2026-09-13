@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { FileText, Map as MapIcon, Mic, Pencil, RotateCw, Send, Square, Volume2 } from 'lucide-react'
+import { FileText, Map as MapIcon, Mic, Pencil, RotateCw, Send, Square, Trash2, Volume2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Eyebrow } from '@/components/ui/Eyebrow'
 import { Heading } from '@/components/ui/Heading'
@@ -8,12 +8,11 @@ import { useVoiceRecorder } from '@/hooks/useVoiceRecorder'
 import { api, type ApiError, type EvidenceDto } from '@/lib/api'
 import { cn } from '@/lib/cn'
 
-type Mode = 'push' | 'handsfree'
 type Phase = 'idle' | 'transcribing' | 'thinking' | 'speaking'
 
-type UserTurn = { id: number; role: 'user'; text: string }
+type UserTurn = { id: string; role: 'user'; text: string }
 type TutorTurn = {
-  id: number
+  id: string
   role: 'tutor'
   text: string
   citations: EvidenceDto[]
@@ -25,6 +24,22 @@ type Turn = UserTurn | TutorTurn
 
 const HOLD_MS = 300
 const HISTORY_TURNS = 12
+const MAX_SAVED_TURNS = 100
+
+// Demo-grade persistence: the conversation lives in this browser, one per subject.
+// Answer audio is cached server-side by content hash, so saved Replay links keep working.
+const storageKey = (courseId: string) => `graphite:tutor:${courseId}`
+
+function loadTurns(courseId: string): Turn[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(storageKey(courseId)) ?? '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+const newId = () => crypto.randomUUID()
 
 const PHASE_LABEL: Record<Phase, string> = {
   idle: '',
@@ -34,21 +49,22 @@ const PHASE_LABEL: Record<Phase, string> = {
 }
 
 export function TutorPanel({ courseId }: { courseId: string }) {
-  const [mode, setMode] = useState<Mode>('push')
   const [phase, setPhase] = useState<Phase>('idle')
   const [draft, setDraft] = useState('')
-  const [turns, setTurns] = useState<Turn[]>([])
+  const [turns, setTurns] = useState<Turn[]>(() => loadTurns(courseId))
   const [error, setError] = useState<string | null>(null)
-  const [playingId, setPlayingId] = useState<number | null>(null)
+  const [playingId, setPlayingId] = useState<string | null>(null)
   const [openCitation, setOpenCitation] = useState<string | null>(null)
 
-  const nextId = useRef(1)
-  const turnsRef = useRef<Turn[]>([])
-  const modeRef = useRef<Mode>(mode)
+  const turnsRef = useRef<Turn[]>(turns)
   useEffect(() => {
     turnsRef.current = turns
-    modeRef.current = mode
-  }, [turns, mode])
+    try {
+      localStorage.setItem(storageKey(courseId), JSON.stringify(turns.slice(-MAX_SAVED_TURNS)))
+    } catch {
+      // Storage full or blocked: the chat still works for this session.
+    }
+  }, [turns, courseId])
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const listEndRef = useRef<HTMLDivElement | null>(null)
@@ -84,12 +100,12 @@ export function TutorPanel({ courseId }: { courseId: string }) {
       setError(null)
       setDraft('')
       const history = turnsRef.current.slice(-HISTORY_TURNS).map((t) => ({ role: t.role, text: t.text }))
-      setTurns((prev) => [...prev, { id: nextId.current++, role: 'user', text }])
+      setTurns((prev) => [...prev, { id: newId(), role: 'user', text }])
       setPhase('thinking')
       try {
         const result = await api.tutorTurn(courseId, text, history)
         const turn: TutorTurn = {
-          id: nextId.current++,
+          id: newId(),
           role: 'tutor',
           text: result.answer_text,
           citations: result.citations,
@@ -128,13 +144,9 @@ export function TutorPanel({ courseId }: { courseId: string }) {
           setPhase('idle')
           return
         }
-        if (modeRef.current === 'handsfree') {
-          await ask(heard)
-        } else {
-          setDraft(heard)
-          setPhase('idle')
-          requestAnimationFrame(() => inputRef.current?.focus())
-        }
+        setDraft(heard)
+        setPhase('idle')
+        requestAnimationFrame(() => inputRef.current?.focus())
       } catch (err) {
         const apiErr = err as ApiError
         setError(
@@ -145,25 +157,20 @@ export function TutorPanel({ courseId }: { courseId: string }) {
         setPhase('idle')
       }
     },
-    [ask, courseId],
+    [courseId],
   )
 
   const recorder = useVoiceRecorder({ onTake })
-  const { setPaused } = recorder
-
-  useEffect(() => {
-    if (recorder.handsFree) setPaused(phase !== 'idle')
-  }, [phase, recorder.handsFree, setPaused])
 
   useEffect(() => {
     listEndRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [turns.length, phase])
 
-  const switchMode = (next: Mode) => {
-    if (next === mode) return
-    if (recorder.handsFree) recorder.stopHandsFree()
-    if (recorder.status === 'recording') recorder.stopTake()
-    setMode(next)
+  const clearChat = () => {
+    stopAudio()
+    setTurns([])
+    setDraft('')
+    setError(null)
   }
 
   const busy = phase === 'transcribing' || phase === 'thinking'
@@ -199,15 +206,7 @@ export function TutorPanel({ courseId }: { courseId: string }) {
   const micBlocked = recorder.status === 'unsupported' || recorder.status === 'denied' || recorder.status === 'error'
   const status =
     PHASE_LABEL[phase] ||
-    (recording
-      ? mode === 'push'
-        ? tapToggled
-          ? 'Recording — tap again to finish'
-          : 'Recording — release to finish'
-        : 'Hearing you…'
-      : recorder.handsFree
-        ? 'Listening — just start talking'
-        : '')
+    (recording ? (tapToggled ? 'Recording — tap again to finish' : 'Recording — release to finish') : '')
 
   return (
     <section className="rounded-2xl border-2 border-ink/10 bg-paper p-6 shadow-chunky">
@@ -221,28 +220,12 @@ export function TutorPanel({ courseId }: { courseId: string }) {
             Ask out loud and get a spoken answer drawn only from this subject&apos;s notes, with the sources it used.
           </p>
         </div>
-        <div role="radiogroup" aria-label="Voice mode" className="flex rounded-full border-2 border-ink/15 bg-paper-dark p-1">
-          {(
-            [
-              ['push', 'Push to talk'],
-              ['handsfree', 'Hands-free'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={mode === value}
-              onClick={() => switchMode(value)}
-              className={cn(
-                'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors',
-                mode === value ? 'bg-paper text-ink shadow-chunky-sm' : 'text-ink-soft hover:text-ink',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {turns.length > 0 && (
+          <Button type="button" variant="ghost" size="sm" onClick={clearChat} disabled={phase === 'thinking' || phase === 'transcribing'}>
+            <Trash2 className="h-4 w-4" strokeWidth={1.75} />
+            Clear chat
+          </Button>
+        )}
       </div>
 
       <div
@@ -353,53 +336,40 @@ export function TutorPanel({ courseId }: { courseId: string }) {
       />
 
       <div className="mt-5 flex flex-col items-center gap-3">
-        {mode === 'push' ? (
-          <button
-            type="button"
-            onPointerDown={onMicDown}
-            onPointerUp={onMicUp}
-            onKeyDown={(event) => {
-              if ((event.key === ' ' || event.key === 'Enter') && !event.repeat && !busy) {
-                event.preventDefault()
-                if (recording) recorder.stopTake()
-                else void recorder.startTake()
-              }
-            }}
-            disabled={busy || micBlocked}
-            aria-pressed={recording}
-            aria-label={recording ? 'Stop recording' : 'Hold or tap to talk'}
-            className={cn(
-              'relative flex h-20 w-20 touch-none select-none items-center justify-center rounded-full text-paper transition-transform disabled:opacity-50',
-              recording ? 'bg-red-600 shadow-chunky' : 'bg-accent shadow-chunky-accent active:translate-y-[2px]',
-            )}
-          >
-            {recording && (
-              <span
-                aria-hidden="true"
-                className="absolute inset-0 rounded-full border-4 border-red-600"
-                style={{ transform: `scale(${1 + recorder.level * 0.45})`, opacity: 0.35 }}
-              />
-            )}
-            {recording ? <Square className="h-7 w-7" strokeWidth={2} /> : <Mic className="h-8 w-8" strokeWidth={2} />}
-          </button>
-        ) : (
-          <Button
-            type="button"
-            variant={recorder.handsFree ? 'secondary' : 'primary'}
-            onClick={() => (recorder.handsFree ? recorder.stopHandsFree() : void recorder.startHandsFree())}
-            disabled={micBlocked}
-          >
-            {recorder.handsFree ? <Square className="h-4 w-4" strokeWidth={2} /> : <Mic className="h-4 w-4" strokeWidth={2} />}
-            {recorder.handsFree ? 'End conversation' : 'Start conversation'}
-          </Button>
-        )}
-
+        <button
+          type="button"
+          onPointerDown={onMicDown}
+          onPointerUp={onMicUp}
+          onKeyDown={(event) => {
+            if ((event.key === ' ' || event.key === 'Enter') && !event.repeat && !busy) {
+              event.preventDefault()
+              if (recording) recorder.stopTake()
+              else void recorder.startTake()
+            }
+          }}
+          disabled={busy || micBlocked}
+          aria-pressed={recording}
+          aria-label={recording ? 'Stop recording' : 'Hold or tap to talk'}
+          className={cn(
+            'relative flex h-20 w-20 touch-none select-none items-center justify-center rounded-full text-paper transition-transform disabled:opacity-50',
+            recording ? 'bg-red-600 shadow-chunky' : 'bg-accent shadow-chunky-accent active:translate-y-[2px]',
+          )}
+        >
+          {recording && (
+            <span
+              aria-hidden="true"
+              className="absolute inset-0 rounded-full border-4 border-red-600"
+              style={{ transform: `scale(${1 + recorder.level * 0.45})`, opacity: 0.35 }}
+            />
+          )}
+          {recording ? <Square className="h-7 w-7" strokeWidth={2} /> : <Mic className="h-8 w-8" strokeWidth={2} />}
+        </button>
         <p className="min-h-5 text-xs font-medium text-ink-soft" aria-live="polite">
           {micBlocked
             ? recorder.status === 'denied'
               ? 'Microphone access was blocked. Allow it in your browser, or type below.'
               : 'Voice input isn’t available in this browser. Type your question below.'
-            : status || (mode === 'push' ? 'Hold the mic to talk, or tap to start and tap to stop' : '')}
+            : status || 'Hold the mic to talk, or tap to start and tap to stop'}
         </p>
         {phase === 'speaking' && (
           <button type="button" onClick={stopAudio} className="inline-flex items-center gap-1 text-xs font-semibold text-ink hover:text-accent-dark">
@@ -421,7 +391,7 @@ export function TutorPanel({ courseId }: { courseId: string }) {
               if (event.key === 'Enter' && !event.shiftKey) submit(event)
             }}
             rows={2}
-            placeholder={mode === 'push' ? 'Your transcript lands here to edit — or just type a question' : 'Type a question'}
+            placeholder="Your transcript lands here to edit — or just type a question"
             className="w-full resize-none rounded-xl border-2 border-ink/15 bg-paper-dark px-4 py-2.5 text-sm text-ink outline-none focus:border-accent"
           />
         </label>

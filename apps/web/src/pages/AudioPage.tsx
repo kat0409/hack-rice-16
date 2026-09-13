@@ -86,7 +86,7 @@ export function AudioPage() {
         </Heading>
       </header>
 
-      {courseId && <TutorPanel courseId={courseId} />}
+      {courseId && <TutorPanel key={courseId} courseId={courseId} />}
 
       <StepPicker courseId={courseId} steps={steps} step={step} loading={stepLoading} onSelect={select} />
 
