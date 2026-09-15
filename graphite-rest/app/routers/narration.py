@@ -1,8 +1,9 @@
 """Narration of a step's summary (design-doc.md §10.3).
 
-Backend-mediated: the browser never holds the ElevenLabs key. Audio is cached
-on disk by a hash of the normalized text + voice + model so replaying a step
-costs nothing, and the API streams the local file rather than returning a path.
+Runs entirely on this machine (`app/services/local_voice.py`), no API key and
+no network at inference. Audio is cached on disk by a hash of the normalized
+text + voice + model so replaying a step costs nothing, and the API streams
+the local file rather than returning a path.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ import hashlib
 import json
 import re
 import uuid
+from pathlib import Path
 
 import psycopg
 from fastapi import APIRouter, Depends, status
@@ -21,13 +23,25 @@ from app.errors import AppError
 from app.routers.artifacts import _to_out
 from app.routers.courses import _row
 from app.schemas import ArtifactOut
-from app.services.elevenlabs import TTS_MODEL_ID, synthesize_speech
+from app.services.local_voice import TTS_MODEL_ID, synthesize_speech
 from graphite.config import REPO_ROOT, Settings, get_settings
 
 router = APIRouter(tags=["narration"])
 
 CACHE_DIR = REPO_ROOT / "data" / "narration-cache"
 MAX_CHARS = 2500
+
+# {digest}.wav is current; {digest}.mp3 is what the old ElevenLabs backend
+# wrote, kept readable so narrations generated before the switch still play.
+_AUDIO_MEDIA_TYPES = {".wav": "audio/wav", ".mp3": "audio/mpeg"}
+
+
+def audio_path(digest: str) -> tuple[Path, str] | None:
+    for suffix, media_type in _AUDIO_MEDIA_TYPES.items():
+        path = CACHE_DIR / f"{digest}{suffix}"
+        if path.exists():
+            return path, media_type
+    return None
 
 
 def _narration_text(content: dict) -> str:
@@ -72,14 +86,6 @@ def create_narration(
             message="Only summaries can be narrated.",
             status_code=status.HTTP_409_CONFLICT,
         )
-    if not settings.elevenlabs_api_key or not settings.elevenlabs_voice_id:
-        raise AppError(
-            code="NARRATION_UNAVAILABLE",
-            message="Narration is not configured; text mode stays available.",
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            retryable=False,
-        )
-
     content = source["content"]
     if isinstance(content, str):
         content = json.loads(content)
@@ -91,13 +97,12 @@ def create_narration(
             status_code=status.HTTP_409_CONFLICT,
         )
 
-    voice_id = settings.elevenlabs_voice_id
+    voice_id = settings.tts_voice
     digest = hashlib.sha256(f"{text}\n{voice_id}\n{TTS_MODEL_ID}".encode()).hexdigest()
-    path = CACHE_DIR / f"{digest}.mp3"
-    if not path.exists():
-        audio = synthesize_speech(api_key=settings.elevenlabs_api_key, voice_id=voice_id, text=text)
+    if audio_path(digest) is None:
+        audio = synthesize_speech(text=text, settings=settings)
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(audio)
+        (CACHE_DIR / f"{digest}.wav").write_bytes(audio)
 
     row = _row(
         db,
@@ -127,11 +132,12 @@ def narration_audio(narration_id: uuid.UUID, db: psycopg.Connection = Depends(ge
     content = row["content"] if row else None
     if isinstance(content, str):
         content = json.loads(content)
-    path = CACHE_DIR / f"{content['hash']}.mp3" if content and content.get("hash") else None
-    if path is None or not path.exists():
+    found = audio_path(content["hash"]) if content and content.get("hash") else None
+    if found is None:
         raise AppError(
             code="NARRATION_NOT_FOUND",
             message=f"No narration audio for id {narration_id}.",
             status_code=status.HTTP_404_NOT_FOUND,
         )
-    return FileResponse(path, media_type="audio/mpeg", filename="narration.mp3")
+    path, media_type = found
+    return FileResponse(path, media_type=media_type, filename=f"narration{path.suffix}")

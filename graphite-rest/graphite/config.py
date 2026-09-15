@@ -56,13 +56,21 @@ class Settings(BaseSettings):
     chunk_max_tokens: int = 1000
     chunk_overlap_tokens: int = 100
 
-    # --- Voice ------------------------------------------------------------
-    elevenlabs_api_key: str | None = None
-    elevenlabs_voice_id: str | None = None
-    # Not in the original .env.example list; the STT model id is small and
-    # deployment-specific enough to be worth overriding without a code change.
-    # "scribe_v2" is current; older docs saying "scribe_v1" are stale.
-    elevenlabs_stt_model_id: str = "scribe_v2"
+    # --- Voice --------------------------------------------------------------
+    # Local-only speech-to-text (faster-whisper) and text-to-speech (Kokoro).
+    # No API key, no network at inference — voice stays inside the local-first
+    # boundary the same way embeddings do (§8.11). Models are lazily downloaded
+    # once into VOICE_MODEL_DIR and cached there for every later run.
+    stt_model: str = "base.en"  # any faster-whisper size: tiny.en, small.en, large-v3, ...
+    # "auto" picks cuda/float16 when a CUDA GPU + its runtime libs are usable,
+    # else falls back to cpu/int8 — see app/services/local_voice.py.
+    stt_device: str = "auto"
+    stt_compute_type: str = "auto"
+    # Kokoro voice ids: https://github.com/thewh1teagle/kokoro-onnx#voices
+    tts_voice: str = "af_heart"
+    tts_speed: float = 1.0
+    tts_device: str = "auto"  # "auto" uses CUDAExecutionProvider only if onnxruntime reports it available
+    voice_model_dir: str = "./data/models"
 
     # --- Uploads ----------------------------------------------------------
     upload_dir: str = "./data/uploads"
@@ -94,6 +102,12 @@ class Settings(BaseSettings):
     @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_mb * 1024 * 1024
+
+    @property
+    def voice_model_dir_path(self) -> Path:
+        """Same relative-path anchoring as `upload_dir_path`, for the same reason."""
+        path = Path(self.voice_model_dir)
+        return path if path.is_absolute() else (REPO_ROOT / path).resolve()
 
 
 @lru_cache

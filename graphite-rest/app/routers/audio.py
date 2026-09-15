@@ -6,18 +6,20 @@ import uuid
 
 import psycopg
 from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 
 from graphite.config import Settings, get_settings
 from app.deps import get_db
 from app.errors import AppError
 from app.routers.courses import require_course
 from app.schemas import TranscriptionResponse
-from app.services.elevenlabs import transcribe_audio
+from app.services.local_voice import transcribe_audio
 
 router = APIRouter(tags=["audio"])
 
-# Generous but bounded; ElevenLabs itself caps request size and this is a
-# voice-note/goal-dictation feature, not bulk lecture-recording ingestion.
+# Generous but bounded; this is a voice-note/goal-dictation feature, not bulk
+# lecture-recording ingestion, and the local Whisper model runs on CPU by
+# default.
 MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 
@@ -44,17 +46,6 @@ async def transcribe_course_audio(
 ) -> TranscriptionResponse:
     require_course(course_id, db)
 
-    if not settings.elevenlabs_api_key:
-        raise AppError(
-            code="TRANSCRIPTION_UNAVAILABLE",
-            message=(
-                "Voice transcription is not configured on this server "
-                "(ELEVENLABS_API_KEY is unset)."
-            ),
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            retryable=False,
-        )
-
     data = await audio.read()
     if not data:
         raise AppError(code="EMPTY_FILE", message="Uploaded audio is empty.", status_code=400)
@@ -65,13 +56,7 @@ async def transcribe_course_audio(
             status_code=400,
         )
 
-    result = await transcribe_audio(
-        api_key=settings.elevenlabs_api_key,
-        model_id=settings.elevenlabs_stt_model_id,
-        filename=audio.filename or "voice-note.webm",
-        content_type=audio.content_type or "application/octet-stream",
-        audio_bytes=data,
-    )
+    result = await run_in_threadpool(transcribe_audio, audio_bytes=data, settings=settings)
 
     document_id: uuid.UUID | None = None
     if persist_as_document:

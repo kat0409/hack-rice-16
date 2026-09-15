@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from contextlib import asynccontextmanager
 
@@ -21,6 +22,7 @@ from app.routers import (
     study_sessions,
     tutor,
 )
+from app.services.local_voice import warm_up as warm_up_voice
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("graphite")
@@ -37,6 +39,11 @@ async def lifespan(app: FastAPI):
             "return 503 DB_UNAVAILABLE until Postgres is reachable "
             "(`make db-up` from the repo root)."
         )
+    # Best-effort preload of the local voice models on a daemon thread so the
+    # first real transcription/narration request doesn't pay for it. Never
+    # blocks or fails startup — same "boot degraded, don't crash" rule as the
+    # database connection above.
+    threading.Thread(target=warm_up_voice, args=(settings,), daemon=True).start()
     yield
     db.disconnect()
 

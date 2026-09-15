@@ -22,12 +22,12 @@ Most AI study tools generate more content, or give you a chatbot that sounds con
 | 🗺️ | **Knowledge map** | Concepts, skills, procedures, steps and examples, linked by typed relationships (`REQUIRES`, `PART_OF`, `APPLIED_IN`, …). Every node and edge has a confidence score and links back to the source text that justified it. Fullscreen, search, filter by type, drag, zoom, pinch, and keyboard shortcuts. |
 | 🧭 | **Goal-based learning route** | Give a goal, a time budget, and a weakness. graphite finds the relevant concepts, walks backward through prerequisites, and orders them into a time-boxed route. Each step says why it's included, and anything that didn't fit is reported. |
 | 🃏 | **Grounded study tools** | For each route step: a summary, flashcards, and multiple-choice practice, all generated only from that step's cited evidence and cached. |
-| 🎙️ | **Voice tutor** | Hold the mic and ask a question out loud. Your speech is transcribed (editable before sending), answered from **your notes only** with clickable citations, and spoken back with ElevenLabs. It handles follow-ups ("which one costs money?"), links answers to concepts on the map, and says so when your notes don't cover something. |
+| 🎙️ | **Voice tutor** | Hold the mic and ask a question out loud. Your speech is transcribed locally (editable before sending), answered from **your notes only** with clickable citations, and spoken back with a local voice. It handles follow-ups ("which one costs money?"), links answers to concepts on the map, and says so when your notes don't cover something. |
 | 🔊 | **Narrated recaps** | Turn any step's summary into audio. |
 
 ### Principles
 
-1. **Your course, not the open internet.** Files, text, embeddings, graph, plans and progress stay in a local PostgreSQL database. Only bounded requests (extraction, generation, OCR, voice) leave the machine.
+1. **Your course, not the open internet.** Files, text, embeddings, graph, plans, progress and voice audio stay on this machine. Only bounded requests (extraction, generation, OCR) leave it.
 2. **It shows its work.** Entities, relationships, route steps, study materials and tutor answers all keep citations to source chunks. Citations the model invents are dropped.
 3. **The graph drives the route.** A model helps *read* the material; deterministic graph logic decides the *order*.
 4. **The deadline is real.** The planner never allocates more time than you have and tells you what it left out.
@@ -44,7 +44,7 @@ Most AI study tools generate more content, or give you a chatbot that sounds con
 | **Embeddings** | [fastembed](https://github.com/qdrant/fastembed) with `BAAI/bge-small-en-v1.5` (384 dimensions), **run locally** with no API key and no network |
 | **Database** | One PostgreSQL 16 instance with **pgvector** (semantic search) and **Apache AGE** (graph topology), in a pinned Docker image |
 | **LLM** | Google Gemini through one internal adapter: structured JSON extraction, grounded generation, OCR, with retry and schema repair |
-| **Voice** | ElevenLabs speech-to-text (`scribe_v2`) and text-to-speech (`eleven_turbo_v2_5`), called only from the server |
+| **Voice** | Local speech-to-text ([faster-whisper](https://github.com/SYSTRAN/faster-whisper)) and text-to-speech ([Kokoro](https://github.com/thewh1teagle/kokoro-onnx)) — no API key, no network at inference |
 | **Tooling** | uv, pytest, oxlint, Docker Compose |
 
 ---
@@ -83,7 +83,7 @@ flowchart LR
     end
 
     Gemini["Google Gemini"]
-    Eleven["ElevenLabs<br/>STT + TTS"]
+    LocalVoice["Local voice models<br/>faster-whisper + Kokoro"]
 
     Student --> Sources --> REST
     REST -->|"document + QUEUED job"| SQL
@@ -98,11 +98,11 @@ flowchart LR
     Planner -->|"save session"| SQL
     Study --> Artifacts <-->|"cited chunks only"| Gemini
 
-    Tutor -->|"audio"| Eleven
+    Tutor -->|"audio"| LocalVoice
     Tutor --> TutorEngine
     TutorEngine -->|"vector + heading match"| Vec
     TutorEngine <-->|"retrieved chunks only"| Gemini
-    TutorEngine -->|"answer text"| Eleven
+    TutorEngine -->|"answer text"| LocalVoice
     TutorEngine -.->|"concept links"| Map
 ```
 
@@ -172,14 +172,14 @@ sequenceDiagram
     actor Student
     participant UI as TutorPanel
     participant API as FastAPI
-    participant EL as ElevenLabs
+    participant LV as Local voice<br/>(whisper + kokoro)
     participant DB as Postgres
     participant G as Gemini
 
     Student->>UI: hold mic, ask a question
     UI->>API: POST /courses/{id}/audio-transcriptions
-    API->>EL: speech-to-text
-    EL-->>UI: transcript (editable)
+    API->>LV: speech-to-text
+    LV-->>UI: transcript (editable)
     Student->>UI: Ask
     UI->>API: POST /courses/{id}/tutor/turns {question, recent history}
     API->>DB: vector top-k + section-heading/keyword matches, re-ranked
@@ -187,7 +187,7 @@ sequenceDiagram
     API->>G: question + history + retrieved chunks only (JSON schema)
     G-->>API: answer + cited chunk ids + concept ids
     API->>API: drop invented ids · strip markdown
-    API->>EL: text-to-speech (cached by content hash)
+    API->>LV: text-to-speech (cached by content hash)
     API-->>UI: answer · citations · concepts · audio id
     UI->>Student: spoken answer + clickable sources + map links
 ```
@@ -207,7 +207,7 @@ sequenceDiagram
 | Circular prerequisites | Planner sets aside the weakest edge for ordering only; the edge stays visible on the map |
 | Impossible schedule | Steps are compressed or omitted with reasons; allocated time never exceeds available time |
 | Provider outage or quota | Bounded retries with backoff; completed pipeline stages are kept; extraction can be retried on its own; voice falls back to text |
-| Leaked secrets | Gemini and ElevenLabs keys live only on the server; every error uses one JSON envelope with no stack traces |
+| Leaked secrets | The Gemini key lives only on the server (voice needs no key at all); every error uses one JSON envelope with no stack traces |
 
 ---
 
@@ -219,7 +219,7 @@ apps/web/            React + TypeScript frontend (Vite)
   src/components/    graph/ (canvas, viewport, toolbar), tutor/, route/, layout/, ui/
   src/lib/api.ts     typed API client (snake_case DTOs mapped in lib/mappers.ts)
 graphite-rest/       FastAPI backend + engine
-  app/               routers, schemas, error envelope, ElevenLabs service
+  app/               routers, schemas, error envelope, local voice service
   graphite/          parse · chunk · embed · extract · graph_repository · planner · artifacts · tutor · worker
   tests/             pytest suite (runs against the local database)
 graphite-db/         Postgres 16 + pgvector + Apache AGE image and init SQL (schema, graph, indexes)
@@ -238,14 +238,14 @@ design-doc.md        full product + technical specification (API contract, schem
 - [uv](https://docs.astral.sh/uv/) (installs Python 3.12 for you)
 - Node.js 18+
 - A [Google Gemini API key](https://aistudio.google.com/apikey)
-- *(optional, for voice)* an ElevenLabs API key and voice ID
+- Nothing extra for voice — speech-to-text and text-to-speech run locally (models download once on first use, then work offline)
 
 ### 1. Configure
 
 ```bash
 cp .env.example .env
 # set GEMINI_API_KEY (leave GEMINI_MODEL blank to auto-select)
-# optional: ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID
+# voice needs no configuration — local models download on first use
 ```
 
 > Don't change `EMBEDDING_DIMENSIONS` (384) after the database is created. The vector width is fixed when the schema is first built.

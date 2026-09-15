@@ -103,12 +103,17 @@ class TestRetrieval:
 
 
 class TestVoiceFallback:
-    def test_missing_voice_config_degrades_to_text(self):
-        from app.routers.tutor import _synthesize
+    def test_synthesis_failure_degrades_to_text(self, monkeypatch):
+        import app.routers.tutor as tutor_router
+        from app.errors import AppError
         from graphite.config import Settings
 
-        settings = Settings(elevenlabs_api_key=None, elevenlabs_voice_id=None)
-        assert _synthesize("Hello there.", settings) == (None, "NARRATION_UNAVAILABLE")
+        def _raise(*, text, settings):
+            raise AppError(code="NARRATION_UNAVAILABLE", message="unavailable", status_code=503)
+
+        monkeypatch.setattr(tutor_router, "synthesize_speech", _raise)
+        settings = Settings()
+        assert tutor_router._synthesize("Hello there.", settings) == (None, "NARRATION_UNAVAILABLE")
 
     def test_speech_text_strips_markdown(self):
         from app.routers.tutor import _speech_text

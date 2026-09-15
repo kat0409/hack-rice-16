@@ -3,8 +3,8 @@
 Stateless on the server: the client sends recent conversation turns with each
 question, so no conversation table is needed. Speech-to-text reuses the
 existing audio-transcriptions endpoint. The spoken answer is synthesized
-server-side (the ElevenLabs key never reaches the browser) and cached on disk
-by content hash, like step narration (design-doc.md §10.3).
+locally (no key, no network — `app/services/local_voice.py`) and cached on
+disk by content hash, like step narration (design-doc.md §10.3).
 """
 
 from __future__ import annotations
@@ -21,9 +21,9 @@ from fastapi.responses import FileResponse
 from app.deps import get_db
 from app.errors import AppError
 from app.routers.courses import require_course
-from app.routers.narration import CACHE_DIR, MAX_CHARS
+from app.routers.narration import CACHE_DIR, MAX_CHARS, audio_path
 from app.schemas import GraphEvidenceOut, TutorConceptOut, TutorTurnCreate, TutorTurnOut
-from app.services.elevenlabs import TTS_MODEL_ID, synthesize_speech
+from app.services.local_voice import TTS_MODEL_ID, synthesize_speech
 from graphite.config import Settings, get_settings
 from graphite.tutor import Turn, TutorError, answer_question
 
@@ -50,22 +50,19 @@ def _speech_text(text: str) -> str:
 
 def _synthesize(text: str, settings: Settings) -> tuple[str | None, str | None]:
     """Return (audio_id, error_code). Voice is optional: failures degrade to text mode."""
-    if not settings.elevenlabs_api_key or not settings.elevenlabs_voice_id:
-        return None, "NARRATION_UNAVAILABLE"
     speech = _speech_text(text)
     if not speech:
         return None, "NARRATION_EMPTY"
-    voice_id = settings.elevenlabs_voice_id
+    voice_id = settings.tts_voice
     digest = hashlib.sha256(f"{speech}\n{voice_id}\n{TTS_MODEL_ID}".encode()).hexdigest()
-    path = CACHE_DIR / f"{digest}.mp3"
-    if not path.exists():
+    if audio_path(digest) is None:
         try:
-            audio = synthesize_speech(api_key=settings.elevenlabs_api_key, voice_id=voice_id, text=speech)
+            audio = synthesize_speech(text=speech, settings=settings)
         except AppError as exc:
             logger.warning("Tutor narration failed: %s", exc.code)
             return None, exc.code
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(audio)
+        (CACHE_DIR / f"{digest}.wav").write_bytes(audio)
     return digest, None
 
 
@@ -104,11 +101,12 @@ def create_tutor_turn(
 
 @router.get("/tutor-audio/{audio_id}")
 def tutor_audio(audio_id: str):
-    path = CACHE_DIR / f"{audio_id}.mp3" if _AUDIO_ID.fullmatch(audio_id) else None
-    if path is None or not path.exists():
+    found = audio_path(audio_id) if _AUDIO_ID.fullmatch(audio_id) else None
+    if found is None:
         raise AppError(
             code="TUTOR_AUDIO_NOT_FOUND",
             message="No tutor audio with that id.",
             status_code=status.HTTP_404_NOT_FOUND,
         )
-    return FileResponse(path, media_type="audio/mpeg", filename="tutor-answer.mp3")
+    path, media_type = found
+    return FileResponse(path, media_type=media_type, filename=f"tutor-answer{path.suffix}")

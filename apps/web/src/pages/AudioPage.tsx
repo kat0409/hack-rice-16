@@ -110,7 +110,7 @@ export function AudioPage() {
                 <Mic className="h-4 w-4" strokeWidth={2} />
                 {narrating ? 'Generating voice…' : 'Narrate this step'}
               </button>
-              <span className="text-xs text-ink-soft">Sends only the summary text to ElevenLabs.</span>
+              <span className="text-xs text-ink-soft">Voiced locally — the summary text never leaves this server.</span>
             </div>
           )}
           {narrationError && <p className="mt-3 text-sm text-ink-soft">{narrationError}</p>}

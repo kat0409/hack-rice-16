@@ -15,3 +15,7 @@ wheels/
 
 # Local uploaded course documents (UPLOAD_DIR default, design-doc.md §16.1)
 /data/uploads/
+
+# Downloaded local voice models (VOICE_MODEL_DIR default) — large binaries,
+# re-downloaded on first use, never committed.
+/data/models/
